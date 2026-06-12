@@ -1,0 +1,171 @@
+use reqwest;
+use serde_json::{json, Value};
+use std::fs;
+use std::io::{self, Write};
+use std::thread;
+use std::time::Duration;
+use std::process::Command;
+
+fn chirp() {
+    let _ = Command::new("powershell.exe")
+        .args(&["-c", "[System.Console]::Beep(1000, 100)"])
+        .output();
+}
+
+pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwest::Error> {
+    let client = reqwest::Client::new();
+    
+    let res = client.post(url)
+        .json(&json!({
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": false,
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read content of a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"}
+                            },
+                            "required": ["path"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "list_dir",
+                        "description": "List files and directories in a folder",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string", "description": "Directory path, defaults to current"}
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_content",
+                        "description": "Search for text within files",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {"type": "string"},
+                                "path": {"type": "string"}
+                            },
+                            "required": ["pattern"]
+                        }
+                    }
+                }
+            ]
+        }))
+        .send().await?;
+    
+    let mut json: Value = res.json().await?;
+    
+    // Handle tool calls
+    while let Some(tool_calls) = json["message"]["tool_calls"].as_array() {
+        if tool_calls.is_empty() { break; }
+        
+        for tool in tool_calls {
+            let name = tool["function"]["name"].as_str().unwrap_or("");
+            let args = &tool["function"]["arguments"];
+            
+            let result = match name {
+                "read_file" => {
+                    let path = args["path"].as_str().unwrap_or("");
+                    print!("\r📖 Reading {}... ", path);
+                    io::stdout().flush().unwrap();
+                    fs::read_to_string(path).unwrap_or_else(|_| "File not found".to_string())
+                }
+                "list_dir" => {
+                    let path = args["path"].as_str().unwrap_or(".");
+                    print!("\r📁 Listing {}... ", path);
+                    io::stdout().flush().unwrap();
+                    match fs::read_dir(path) {
+                        Ok(entries) => {
+                            let mut files = Vec::new();
+                            for entry in entries.flatten() {
+                                let name = entry.file_name().to_string_lossy().to_string();
+                                let file_type = if entry.path().is_dir() { "📁" } else { "📄" };
+                                files.push(format!("{} {}", file_type, name));
+                            }
+                            files.join("\n")
+                        }
+                        Err(e) => format!("Error: {}", e),
+                    }
+                }
+                "search_content" => {
+                    let pattern = args["pattern"].as_str().unwrap_or("");
+                    let path = args["path"].as_str().unwrap_or(".");
+                    print!("\r🔍 Searching for '{}'... ", pattern);
+                    io::stdout().flush().unwrap();
+                    
+                    let mut results = Vec::new();
+                    if let Ok(entries) = fs::read_dir(path) {
+                        for entry in entries.flatten() {
+                            let p = entry.path();
+                            if p.is_file() {
+                                if let Ok(content) = fs::read_to_string(&p) {
+                                    if content.contains(pattern) {
+                                        results.push(p.file_name().unwrap().to_string_lossy().to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if results.is_empty() {
+                        "No matches found".to_string()
+                    } else {
+                        format!("Found in: {}", results.join(", "))
+                    }
+                }
+                _ => "Unknown tool".to_string(),
+            };
+            
+            println!(" ✅");
+            
+            let final_res = client.post(url)
+                .json(&json!({
+                    "model": model,
+                    "messages": [
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": null, "tool_calls": [tool]},
+                        {"role": "tool", "content": result}
+                    ],
+                    "stream": false
+                }))
+                .send().await?;
+            
+            json = final_res.json().await?;
+        }
+    }
+    
+    if let Some(msg) = json["message"].as_object() {
+        if let Some(content) = msg.get("content") {
+            let answer = content.as_str().unwrap_or("");
+            
+            let spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            for _ in 0..12 {
+                for &c in &spinner {
+                    print!("\r{}", c);
+                    io::stdout().flush().unwrap();
+                    thread::sleep(Duration::from_millis(40));
+                }
+            }
+            print!("\r\x1B[K");
+            io::stdout().flush().unwrap();
+            
+            chirp();
+            return Ok(answer.to_string());
+        }
+    }
+    
+    Ok("".to_string())
+}

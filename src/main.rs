@@ -1,6 +1,8 @@
 mod config;
 mod ollama;
 mod ui;
+mod tools;
+mod spinner;
 
 use std::io::{self, Write};
 use colored::*;
@@ -28,7 +30,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for c in response.chars() {
             print!("{}", c.to_string().bright_green());
             io::stdout().flush()?;
-            std::thread::sleep(std::time::Duration::from_millis(3));
         }
         println!("\n└────────────────────────────────────────────┘\n");
     }
