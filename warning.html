@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚠️ Ollama WSL Fix</title>
+    <title>⚠️ FucheCode TUI · Rust Dev Log · Ollama WSL Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -30,8 +30,8 @@
     <div class="flex items-center gap-3 mb-8">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-orange-200">⚠️</div>
         <div>
-            <h1 class="text-2xl font-bold text-slate-800">Ollama Connection Issue</h1>
-            <p class="text-sm text-slate-500">WSL can't reach Ollama on Windows</p>
+            <h1 class="text-2xl font-bold text-slate-800">FucheCode TUI · Rust Dev Log · WSL Fix</h1>
+            <p class="text-sm text-slate-500">Rust TUI · Ollama + WSL Bridge · 10 modules · 5 bug fix rounds</p>
         </div>
         <div class="ml-auto">
             <span class="text-xs font-medium px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200/50">trending</span>
@@ -121,30 +121,62 @@
         <div class="border-b border-slate-100 px-6 py-4 bg-gradient-to-r from-purple-50 to-transparent">
             <div class="flex items-center gap-2">
                 <span class="text-lg">🐛</span>
-                <span class="font-semibold text-slate-800">Bug Fix Log — Last 30min</span>
-                <span class="text-xs text-slate-400 ml-auto">5 fixes</span>
+                <span class="font-semibold text-slate-800">Bug Fix Log — Round 1</span>
+                <span class="text-xs text-slate-400 ml-auto">Jun 12, 2026 · 5 fixes</span>
             </div>
         </div>
         <div class="p-5 space-y-4 text-sm">
             <div class="flex gap-3">
                 <span class="text-red-500 shrink-0 mt-0.5">1.</span>
-                <div><span class="font-medium text-slate-800">Empty input loop</span> — <span class="text-slate-600">Crossterm <code class="bg-slate-100 px-1 rounded text-xs">event::poll(100ms)</code> was spinning + mixing with blocking <code class="bg-slate-100 px-1 rounded text-xs">stdin::read_line()</code>. Rewrote with raw mode, character-by-character buffer, submit on Enter.</span></div>
+                <div><span class="font-medium text-slate-800">Empty input loop</span><br><span class="text-slate-600">Crossterm <code class="bg-slate-100 px-1 rounded text-xs">event::poll(100ms)</code> was spinning + mixing with blocking <code class="bg-slate-100 px-1 rounded text-xs">stdin::read_line()</code>. Rewrote with raw mode, character-by-character buffer, submit on Enter.</span></div>
             </div>
             <div class="flex gap-3">
                 <span class="text-red-500 shrink-0 mt-0.5">2.</span>
-                <div><span class="font-medium text-slate-800">Double response output</span> — <span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">ollama.rs</code> streamed + printed tokens, then <code class="bg-slate-100 px-1 rounded text-xs">main.rs</code> re-printed whole response char-by-char. Removed duplicate loop, moved color into stream handler.</span></div>
+                <div><span class="font-medium text-slate-800">Double response output</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">ollama.rs</code> streamed + printed tokens, then <code class="bg-slate-100 px-1 rounded text-xs">main.rs</code> re-printed whole response char-by-char. Removed duplicate loop, moved color into stream handler.</span></div>
             </div>
             <div class="flex gap-3">
                 <span class="text-red-500 shrink-0 mt-0.5">3.</span>
-                <div><span class="font-medium text-slate-800">No streaming feedback</span> — <span class="text-slate-600">Terminal hung silently while Ollama thought. Added <code class="bg-slate-100 px-1 rounded text-xs">💭</code> indicator, overwritten by first token via <code class="bg-slate-100 px-1 rounded text-xs">\r│ </code>.</span></div>
+                <div><span class="font-medium text-slate-800">No streaming feedback</span><br><span class="text-slate-600">Terminal hung silently while Ollama thought. Added <code class="bg-slate-100 px-1 rounded text-xs">💭</code> indicator, overwritten by first token via <code class="bg-slate-100 px-1 rounded text-xs">\r│ </code>.</span></div>
             </div>
             <div class="flex gap-3">
                 <span class="text-red-500 shrink-0 mt-0.5">4.</span>
-                <div><span class="font-medium text-slate-800">Dead code warnings</span> — <span class="text-slate-600">Popup <code class="bg-slate-100 px-1 rounded text-xs">selected</code> field + <code class="bg-slate-100 px-1 rounded text-xs">handle_key</code> unused. Added <code class="bg-slate-100 px-1 rounded text-xs">#[allow(dead_code)]</code>.</span></div>
+                <div><span class="font-medium text-slate-800">Dead code warnings</span><br><span class="text-slate-600">Popup <code class="bg-slate-100 px-1 rounded text-xs">selected</code> field + <code class="bg-slate-100 px-1 rounded text-xs">handle_key</code> unused. Added <code class="bg-slate-100 px-1 rounded text-xs">#[allow(dead_code)]</code>.</span></div>
             </div>
             <div class="flex gap-3">
                 <span class="text-red-500 shrink-0 mt-0.5">5.</span>
-                <div><span class="font-medium text-slate-800">Write blocked in Plan mode</span> — <span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">write_file</code> now checks <code class="bg-slate-100 px-1 rounded text-xs">mode.writes_allowed()</code>. Runs in BUILD, blocked in PLAN.</span></div>
+                <div><span class="font-medium text-slate-800">Write blocked in Plan mode</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">write_file</code> now checks <code class="bg-slate-100 px-1 rounded text-xs">mode.writes_allowed()</code>. Runs in BUILD, blocked in PLAN.</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+        <div class="border-b border-slate-100 px-6 py-4 bg-gradient-to-r from-violet-50 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">🔧</span>
+                <span class="font-semibold text-slate-800">Bug Fix Log — Round 2</span>
+                <span class="text-xs text-slate-400 ml-auto">Jun 12, 2026 · 5 fixes</span>
+            </div>
+        </div>
+        <div class="p-5 space-y-4 text-sm">
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">1.</span>
+                <div><span class="font-medium text-slate-800">Prompt misaligned</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">│ </code> started at column 10 instead of 0. Raw mode <code class="bg-slate-100 px-1 rounded text-xs">\n</code> drops line without carriage return. Added <code class="bg-slate-100 px-1 rounded text-xs">\r</code> after <code class="bg-slate-100 px-1 rounded text-xs">\n</code> in <code class="bg-slate-100 px-1 rounded text-xs">user_prompt_with_mode</code>.</span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">2.</span>
+                <div><span class="font-medium text-slate-800">Header wrapping in raw mode</span><br><span class="text-slate-600">All <code class="bg-slate-100 px-1 rounded text-xs">println!</code> in header lacked <code class="bg-slate-100 px-1 rounded text-xs">\r</code>. Replaced every <code class="bg-slate-100 px-1 rounded text-xs">println!</code> with <code class="bg-slate-100 px-1 rounded text-xs">print!("\r...\n")</code> in <code class="bg-slate-100 px-1 rounded text-xs">ui.rs</code>.</span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">3.</span>
+                <div><span class="font-medium text-slate-800">Esc kills terminal</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">KeyCode::Esc => break</code> closed the app. Removed handler entirely. Only <code class="bg-slate-100 px-1 rounded text-xs">exit</code> or <code class="bg-slate-100 px-1 rounded text-xs">Ctrl+C</code> quits now.</span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">4.</span>
+                <div><span class="font-medium text-slate-800">Terminal stuck on crash</span><br><span class="text-slate-600">Raw mode stayed enabled on panic/Ctrl+C, leaving terminal unusable. Added <code class="bg-slate-100 px-1 rounded text-xs">RawGuard</code> struct with <code class="bg-slate-100 px-1 rounded text-xs">Drop</code> — auto-runs <code class="bg-slate-100 px-1 rounded text-xs">disable_raw_mode()</code> on any exit path.</span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">5.</span>
+                <div><span class="font-medium text-slate-800"><code class="bg-slate-100 px-1 rounded text-xs">commands.rs</code> output broken</span><br><span class="text-slate-600">All <code class="bg-slate-100 px-1 rounded text-xs">println!</code> in command handlers missing <code class="bg-slate-100 px-1 rounded text-xs">\r</code>. Created <code class="bg-slate-100 px-1 rounded text-xs">rl()</code> helper — wraps <code class="bg-slate-100 px-1 rounded text-xs">print!("\r...\n")</code> with flush. Replaced all <code class="bg-slate-100 px-1 rounded text-xs">println!</code> calls.</span></div>
             </div>
         </div>
     </div>
