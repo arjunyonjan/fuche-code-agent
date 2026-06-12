@@ -55,3 +55,10 @@ pub fn search_content(pattern: &str, path: &str) -> String {
     if results.is_empty() { "No matches".to_string() } 
     else { format!("Found in: {}", results.join(", ")) }
 }
+
+pub fn write_file(path: &str, content: &str) -> String {
+    match std::fs::write(path, content) {
+        Ok(_) => format!("✅ Written to: {}", path),
+        Err(e) => format!("❌ Error: {}", e),
+    }
+}

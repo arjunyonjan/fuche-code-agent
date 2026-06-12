@@ -1,27 +1,38 @@
+use std::io::{self, Write};
 use crate::history;
 use crate::ui;
+
+fn rl(s: &str) {
+    print!("\r{}\n", s);
+    io::stdout().flush().unwrap();
+}
 
 pub async fn handle(input: &str, current_model: &mut String) -> Result<bool, Box<dyn std::error::Error>> {
     match input {
         "/help" => {
-            println!("\n📚 FUCHECODE Commands\n");
-            println!("  /help           - Show this help");
-            println!("  /model          - Show current model");
-            println!("  /model <name>   - Switch model");
-            println!("  /history        - Show last 10 messages");
-            println!("  /clear          - Clear conversation history");
-            println!("  /status         - Show system status");
-            println!("  /save           - Export conversation to file");
-            println!("  exit            - Quit fuchecode\n");
+            rl("");
+            rl("📚 FUCHECODE Commands");
+            rl("");
+            rl("  /help           - Show this help");
+            rl("  /model          - Show current model");
+            rl("  /model <name>   - Switch model");
+            rl("  /history        - Show last 10 messages");
+            rl("  /clear          - Clear conversation history");
+            rl("  /status         - Show system status");
+            rl("  /save           - Export conversation to file");
+            rl("  exit            - Quit fuchecode");
+            rl("");
             return Ok(true);
         }
         "/status" => {
             let history_count = history::load_last(9999).len();
-            println!("\n📊 Status:");
-            println!("  Model: {}", current_model);
-            println!("  Ollama: Connected");
-            println!("  History: {} messages", history_count);
-            println!("  Config: ~/.fuchecode/config.toml\n");
+            rl("");
+            rl(&format!("📊 Status:"));
+            rl(&format!("  Model: {}", current_model));
+            rl("  Ollama: Connected");
+            rl(&format!("  History: {} messages", history_count));
+            rl("  Config: ~/.fuchecode/config.toml");
+            rl("");
             return Ok(true);
         }
         "/save" => {
@@ -41,41 +52,47 @@ pub async fn handle(input: &str, current_model: &mut String) -> Result<bool, Box
                 }
             }
             std::fs::write(&filename, content)?;
-            println!("\n💾 Exported to: {}\n", filename);
+            rl("");
+            rl(&format!("💾 Exported to: {}", filename));
+            rl("");
             return Ok(true);
         }
         "/history" => {
-            let history = history::load_last(10);
-            println!("\n📜 Last 10 messages:");
-            for msg in history {
+            rl("");
+            rl("📜 Last 10 messages:");
+            for msg in history::load_last(10) {
                 let role = msg["role"].as_str().unwrap_or("");
                 let content = msg["content"].as_str().unwrap_or("");
                 if role == "user" {
-                    println!("  🧑 You: {}", content);
+                    rl(&format!("  🧑 You: {}", content));
                 } else if role == "assistant" {
-                    println!("  🤖 AI: {}", content);
+                    rl(&format!("  🤖 AI: {}", content));
                 }
             }
-            println!("");
+            rl("");
             return Ok(true);
         }
         "/clear" => {
             history::clear();
-            println!("\n🗑️ History cleared.\n");
+            rl("");
+            rl("🗑️ History cleared.");
+            rl("");
             return Ok(true);
         }
         _ if input.starts_with("/model ") => {
             let new_model = &input[7..];
             if !new_model.is_empty() {
                 *current_model = new_model.to_string();
-                println!("✅ Switched to: {}\n", current_model);
+                rl(&format!("✅ Switched to: {}", current_model));
+                rl("");
                 print!("\x1B[2J\x1B[1;1H");
                 ui::header(current_model);
             }
             return Ok(true);
         }
         "/model" => {
-            println!("📌 Current model: {}\n", current_model);
+            rl(&format!("📌 Current model: {}", current_model));
+            rl("");
             return Ok(true);
         }
         _ => return Ok(false),

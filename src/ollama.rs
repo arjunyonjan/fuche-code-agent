@@ -1,12 +1,13 @@
 use reqwest;
 use serde_json::{json, Value};
+use colored::*;
 use crate::tools;
 use crate::history;
 use std::io::{self, Write};
 use std::time::Instant;
 use futures_util::StreamExt;
 
-pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwest::Error> {
+pub async fn chat_with_mode(url: &str, model: &str, prompt: &str, mode: &crate::mode::Mode) -> Result<String, reqwest::Error> {
     let start = Instant::now();
     let client = reqwest::Client::new();
     
@@ -60,6 +61,21 @@ pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwes
                 {
                     "type": "function",
                     "function": {
+                        "name": "write_file",
+                        "description": "Write content to a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "content": {"type": "string"}
+                            },
+                            "required": ["path", "content"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
                         "name": "clear_screen",
                         "description": "Clear terminal",
                         "parameters": {
@@ -89,7 +105,10 @@ pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwes
                 if json["done"].as_bool().unwrap_or(false) { break; }
                 
                 if let Some(content) = json["message"]["content"].as_str() {
-                    print!("{}", content);
+                    if full_response.is_empty() {
+                        print!("\r│ ");
+                    }
+                    print!("{}", content.white());
                     io::stdout().flush().unwrap();
                     full_response.push_str(content);
                 }
@@ -108,6 +127,16 @@ pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwes
                                     args["pattern"].as_str().unwrap_or(""),
                                     args["path"].as_str().unwrap_or("")
                                 ),
+                                "write_file" => {
+                                    if !mode.writes_allowed() {
+                                        format!("❌ {} mode: Write blocked. Press Tab to switch to BUILD.", mode.name())
+                                    } else {
+                                        tools::write_file(
+                                            args["path"].as_str().unwrap_or(""),
+                                            args["content"].as_str().unwrap_or("")
+                                        )
+                                    }
+                                },
                                 "clear_screen" => {
                                     print!("\x1B[2J\x1B[1;1H");
                                     "Screen cleared".to_string()
@@ -117,7 +146,6 @@ pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwes
                             
                             eprintln!("\n✓ {} executed", name);
                             
-                            // Send tool result back
                             let tool_res = client.post(url)
                                 .json(&json!({
                                     "model": model,
@@ -142,7 +170,7 @@ pub async fn chat(url: &str, model: &str, prompt: &str) -> Result<String, reqwes
                                     if let Ok(tjson) = serde_json::from_str::<Value>(&tline) {
                                         if tjson["done"].as_bool().unwrap_or(false) { break; }
                                         if let Some(content) = tjson["message"]["content"].as_str() {
-                                            print!("{}", content);
+                                            print!("{}", content.white());
                                             io::stdout().flush().unwrap();
                                             full_response.push_str(content);
                                         }

@@ -1,0 +1,28 @@
+FUCHECODE v4.0 — Build Notes
+
+🔥 SVG Glowing Splash Screen
+
+Yes — Ratatui can render SVG via `viuer` or `image` crate, but glowing animation needs terminal support (Kitty graphics protocol or Sixel).
+
+Minimal glowing load screen approach:
+
+```rust
+use viuer::{Config, print};
+
+// Load SVG → PNG → terminal
+let img = image::load_from_memory(include_bytes!("jarvis_logo.svg")).unwrap();
+let config = Config {
+    transparent: true,
+    ..Default::default()
+};
+print(&img, &config).unwrap();
+
+// Glow effect = print same image with increasing brightness
+for i in 0..10 {
+    let bright = format!("\x1B[38;2;{};{};{}m", 0, 100 + i*15, 150);
+    print!("{}\r", bright);
+    thread::sleep(Duration::from_millis(50));
+}
+```
+
+One-liner: "SVG → terminal via viuer, brightness loop = glow. Needs Kitty/iTerm2 with Sixel." 🔥

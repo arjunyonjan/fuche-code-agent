@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUCHECODE · Build Log</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Google Sans', 'Inter', system-ui, sans-serif; transition: background 0.3s, color 0.2s; }
+        .gemini-card { border-radius: 24px; transition: all 0.2s ease; }
+        .gemini-card:hover { transform: translateY(-2px); }
+        .feature-item { border-radius: 16px; display: flex; align-items: center; gap: 12px; transition: background 0.2s; }
+        .stat-card { border-radius: 20px; padding: 16px; text-align: center; transition: background 0.2s; }
+        pre { border-radius: 16px; padding: 16px; overflow-x: auto; font-size: 12px; font-family: 'Google Sans Mono', 'Menlo', monospace; transition: background 0.2s; }
+        .chip { border-radius: 100px; padding: 4px 12px; font-size: 13px; font-weight: 500; transition: background 0.2s, color 0.2s; }
+        .theme-toggle { cursor: pointer; width: 48px; height: 28px; border-radius: 100px; transition: 0.2s; display: flex; align-items: center; padding: 0 4px; }
+        .theme-toggle-knob { width: 22px; height: 22px; border-radius: 50%; transition: 0.2s; }
+        
+        /* Light theme (default) */
+        body.light { background: #fefefe; color: #1e1e1e; }
+        body.light .gemini-card { background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.03), 0 1px 6px -1px rgba(0,0,0,0.02); border: 1px solid #e8eaed; }
+        body.light .feature-item { background: #f8f9fa; }
+        body.light .stat-card { background: #f8f9fa; }
+        body.light pre { background: #f8f9fa; border: 1px solid #e8eaed; }
+        body.light .chip { background: #f5f5f5; color: #1e1e1e; }
+        body.light .chip-active { background: #e8f0fe; color: #1a73e8; }
+        body.light .badge { background: #f0f4f9; color: #1e1e1e; }
+        body.light .theme-toggle { background: #e0e0e0; }
+        body.light .theme-toggle-knob { background: #ffffff; transform: translateX(0); }
+        
+        /* Dark theme */
+        body.dark { background: #1a1a1a; color: #e8eaed; }
+        body.dark .gemini-card { background: #2d2d2d; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.2); border: 1px solid #3d3d3d; }
+        body.dark .feature-item { background: #2d2d2d; }
+        body.dark .stat-card { background: #2d2d2d; }
+        body.dark pre { background: #2d2d2d; border: 1px solid #3d3d3d; color: #e8eaed; }
+        body.dark .chip { background: #3d3d3d; color: #e8eaed; }
+        body.dark .chip-active { background: #1a3a5c; color: #8ab4f8; }
+        body.dark .badge { background: #3d3d3d; color: #e8eaed; }
+        body.dark .theme-toggle { background: #555; }
+        body.dark .theme-toggle-knob { background: #e8eaed; transform: translateX(20px); }
+        body.dark .border-gray-100 { border-color: #3d3d3d !important; }
+        body.dark .bg-gray-50 { background: #2d2d2d !important; }
+        body.dark .text-gray-500 { color: #aaa !important; }
+        body.dark .text-gray-400 { color: #888 !important; }
+        body.dark code { color: #8ab4f8; }
+    </style>
+</head>
+<body class="light">
+
+<div class="max-w-5xl mx-auto px-5 py-10">
+
+    <!-- Header with Theme Toggle -->
+    <div class="flex justify-between items-center mb-8">
+        <div></div>
+        <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-500">🌙</span>
+            <div class="theme-toggle" onclick="toggleTheme()">
+                <div class="theme-toggle-knob"></div>
+            </div>
+            <span class="text-sm text-gray-500">☀️</span>
+        </div>
+    </div>
+
+    <div class="text-center mb-12">
+        <div class="flex justify-center gap-2 mb-4">
+            <span class="chip chip-active">🔥 FUCHECODE v3.1</span>
+            <span class="chip">✅ Production Ready</span>
+        </div>
+        <h1 class="text-5xl font-bold tracking-tight mb-3">FUCHECODE</h1>
+        <p class="text-gray-500 text-lg max-w-md mx-auto">Rust + Ollama · Function Calling · Memory · Model Switcher</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-12">
+        <div class="stat-card"><div class="text-2xl font-bold">15+</div><div class="text-xs text-gray-500">Features</div></div>
+        <div class="stat-card"><div class="text-2xl font-bold">7</div><div class="text-xs text-gray-500">Modules</div></div>
+        <div class="stat-card"><div class="text-2xl font-bold">6</div><div class="text-xs text-gray-500">Commands</div></div>
+        <div class="stat-card"><div class="text-2xl font-bold">100%</div><div class="text-xs text-gray-500">Rust</div></div>
+        <div class="stat-card"><div class="text-2xl font-bold">✅</div><div class="text-xs text-gray-500">Tests Pass</div></div>
+    </div>
+
+    <!-- v1.0 Core -->
+    <div class="mb-12">
+        <div class="flex items-center gap-3 mb-4"><div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-xl flex items-center justify-center text-blue-600 font-bold">1</div><h2 class="text-2xl font-semibold tracking-tight">v1.0 — Core Foundation</h2></div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="feature-item p-3"><span class="text-xl">🔧</span><div><div class="font-medium">Tool Calling</div><div class="text-xs text-gray-500">AI decides tools</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">📁</span><div><div class="font-medium">Directory Listing</div><div class="text-xs text-gray-500">📁 folders · 📄 files</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">📖</span><div><div class="font-medium">File Reading</div><div class="text-xs text-gray-500">Silent read + AI</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">🧹</span><div><div class="font-medium">Clear Screen</div><div class="text-xs text-gray-500">Native clear</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">⠋</span><div><div class="font-medium">Braille Spinner</div><div class="text-xs text-gray-500">⠋⠙⠹⠸</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">🔊</span><div><div class="font-medium">Sci-fi Chirp</div><div class="text-xs text-gray-500">Beep on response</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">📦</span><div><div class="font-medium">Modular Code</div><div class="text-xs text-gray-500">7 modules</div></div></div>
+            <div class="feature-item p-3"><span class="text-xl">🎨</span><div><div class="font-medium">Clean UI</div><div class="text-xs text-gray-500">Box art + colors</div></div></div>
+        </div>
+    </div>
+
+    <!-- v2.0 Tools -->
+    <div class="mb-12">
+        <div class="flex items-center gap-3 mb-4"><div class="w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-xl flex items-center justify-center text-purple-600 font-bold">2</div><h2 class="text-2xl font-semibold tracking-tight">v2.0 — Tool Use & Intelligence</h2></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="gemini-card p-4"><div class="font-medium">🧠 Function Calling</div><div class="text-sm text-gray-500">AI decides which tool — no hardcoded commands</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">🔍 Search Tool</div><div class="text-sm text-gray-500">grep via AI — "find where I use reqwest"</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">🎯 Intent Detection</div><div class="text-sm text-gray-500">AI understands "what's in notes.html"</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">🔄 Auto Detection</div><div class="text-sm text-gray-500">"what's in src/" → list_dir</div></div>
+        </div>
+        <pre class="mt-4"><code>{
+  "tools": [{
+    "type": "function",
+    "function": { "name": "read_file", "parameters": { "path": {"type": "string"} } }
+  }]
+}</code></pre>
+    </div>
+
+    <!-- v3.0 Memory -->
+    <div class="mb-12">
+        <div class="flex items-center gap-3 mb-4"><div class="w-8 h-8 bg-emerald-100 dark:bg-emerald-900 rounded-xl flex items-center justify-center text-emerald-600 font-bold">3</div><h2 class="text-2xl font-semibold tracking-tight">v3.0 — Memory & Persistence</h2></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="gemini-card p-4"><div class="font-medium">💾 Memory / History</div><div class="text-sm text-gray-500">JSONL · Auto-saved with timestamp</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">🎛️ Model Switcher</div><div class="text-sm text-gray-500">/model list · /model qwen3-coder</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">⚙️ Config File</div><div class="text-sm text-gray-500">~/.fuchecode/config.toml</div></div>
+            <div class="gemini-card p-4"><div class="font-medium">🌊 Streaming</div><div class="text-sm text-gray-500">Real-time token-by-token</div></div>
+        </div>
+    </div>
+
+    <!-- v3.1 Fixes -->
+    <div class="mb-12">
+        <div class="flex items-center gap-3 mb-4"><div class="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-xl flex items-center justify-center text-orange-600 font-bold">🔧</div><h2 class="text-2xl font-semibold tracking-tight">v3.1 — Glitches Fixed</h2></div>
+        <div class="space-y-2">
+            <div class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><span class="text-emerald-600">✓</span><div><span class="font-medium">popup.items private field</span><div class="text-xs text-gray-500">Added getters</div></div></div>
+            <div class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><span class="text-emerald-600">✓</span><div><span class="font-medium">Duplicate command sections</span><div class="text-xs text-gray-500">Consolidated into one popup</div></div></div>
+            <div class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><span class="text-emerald-600">✓</span><div><span class="font-medium">Failed input reader</span><div class="text-xs text-gray-500">crossterm crash → stdin loop</div></div></div>
+            <div class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><span class="text-emerald-600">✓</span><div><span class="font-medium">Unused imports + variable</span><div class="text-xs text-gray-500">Clean warnings</div></div></div>
+        </div>
+    </div>
+
+    <!-- Commands -->
+    <div class="rounded-2xl p-6 mb-10 bg-gray-50 dark:bg-gray-800">
+        <h3 class="font-semibold text-lg mb-4">⌨️ Commands</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div><code class="text-blue-600">/help</code><div class="text-xs text-gray-500">Show help</div></div>
+            <div><code class="text-blue-600">/model</code><div class="text-xs text-gray-500">Show current</div></div>
+            <div><code class="text-blue-600">/model list</code><div class="text-xs text-gray-500">List available</div></div>
+            <div><code class="text-blue-600">/model &lt;name&gt;</code><div class="text-xs text-gray-500">Switch model</div></div>
+            <div><code class="text-blue-600">/history</code><div class="text-xs text-gray-500">Last 10 messages</div></div>
+            <div><code class="text-blue-600">/clear</code><div class="text-xs text-gray-500">Clear history</div></div>
+            <div><code class="text-blue-600">/status</code><div class="text-xs text-gray-500">System status</div></div>
+            <div><code class="text-blue-600">/save</code><div class="text-xs text-gray-500">Export conv</div></div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-xs text-gray-400 pt-6 border-t border-gray-200 dark:border-gray-700">
+        FUCHECODE v3.1 · Rust + Ollama · 15+ Features · 100% Tested
+    </div>
+</div>
+
+<script>
+    function toggleTheme() {
+        const body = document.body;
+        if (body.classList.contains('light')) {
+            body.classList.remove('light');
+            body.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            body.classList.remove('dark');
+            body.classList.add('light');
+            localStorage.setItem('theme', 'light');
+        }
+    }
+    
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.remove('light');
+        document.body.classList.add('dark');
+    } else {
+        document.body.classList.remove('dark');
+        document.body.classList.add('light');
+    }
+</script>
+
+</body>
+</html>
