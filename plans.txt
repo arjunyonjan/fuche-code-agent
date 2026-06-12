@@ -1,0 +1,215 @@
+## Plugin System — Detailed Example
+
+### What it does:
+Users add custom tools by dropping a `.toml` file into `~/.fuchecode/plugins/`
+
+### Example Plugin: `weather.toml`
+
+```toml
+name = "get_weather"
+description = "Get current weather for a city"
+command = "curl -s wttr.in/{{city}}?format=3"
+parameters = [
+    { name = "city", type = "string", required = true }
+]
+```
+
+### User experience:
+
+**User types:** "What's the weather in London?"
+
+**AI sees:** Tool `get_weather` with parameter `city="London"`
+
+**AI calls:** `curl -s wttr.in/London?format=3`
+
+**AI responds:** "London: ☁️ 15°C, light rain"
+
+---
+
+### Another Plugin: `calculate.toml`
+
+```toml
+name = "calculate"
+description = "Evaluate math expression"
+command = "python3 -c 'print(eval(\"{{expression}}\"))'"
+parameters = [
+    { name = "expression", type = "string", required = true }
+]
+```
+
+**User:** "Calculate 245 * 38"
+
+**AI:** → `python3 -c 'print(eval("245 * 38"))'` → `9310`
+
+---
+
+### Plugin Types:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **Shell** | Run any command | `curl`, `python`, `grep` |
+| **Rust WASM** | Compiled plugins | Fast, safe |
+| **HTTP API** | Call external APIs | OpenAI, GitHub |
+
+---
+
+### Plugin Discovery:
+
+```bash
+~/.fuchecode/plugins/
+├── weather.toml
+├── calculate.toml
+├── translate.toml
+└── search_web.toml
+```
+
+**Command:** `/plugins list` → Shows all installed plugins
+
+**Auto-injection:** AI sees all tools automatically
+
+---
+
+### Implementation Plan (4 files):
+
+1. **`plugin.rs`** — Load .toml files, parse config
+2. **`plugin_executor.rs`** — Run commands safely (timeout, sandbox)
+3. **`ollama.rs`** — Merge plugins into tools array
+4. **`main.rs`** — Add `/plugins` command
+
+---
+
+### Safety Features:
+
+- Timeout (5 seconds max)
+- No network plugins by default
+- Allowlist: `~/.fuchecode/allowed_commands.toml`
+
+---
+
+**Ready to implement?** ✅ or want to start with Web UI (simpler)?
+
+---
+
+## Voice Input — Detailed Example
+
+### What it does:
+You speak → AI hears → Transcribes → Sends to Ollama → Responds
+
+---
+
+### How it works:
+
+**Flow:**
+```
+🎤 Press 'V' key → Start recording
+   ↓
+Talk: "What's the weather?"
+   ↓
+🎤 Press 'V' again → Stop recording
+   ↓
+📝 whisper.cpp transcribes → "What's the weather?"
+   ↓
+🤖 AI processes → Responds with weather
+```
+
+---
+
+### TUI Integration:
+
+```
+┌─────────────────────────────────────────────┐
+│  🔥 FUCHECODE v1.0                          │
+│  🤖 Model: qwen3-coder:480b-cloud           │
+├─────────────────────────────────────────────┤
+│  [🎤] Press 'V' to speak                     │
+│                                             │
+│  > What's the weather in Tokyo?             │
+│                                             │
+│  🤖 AI: Tokyo: ☀️ 22°C, clear skies         │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+### Technical Stack:
+
+| Component | Crate | Purpose |
+|-----------|-------|---------|
+| Recording | `cpal` | Capture microphone input |
+| Transcription | `whisper-rs` | Local speech-to-text |
+| Audio format | `hound` | WAV encoding |
+| Key binding | `crossterm` | 'V' key detection |
+
+---
+
+### Implementation (3 new files):
+
+**1. `voice.rs` — Recording + transcription**
+```rust
+pub fn record_and_transcribe() -> Result<String> {
+    // Record 3 seconds of audio
+    let audio = record_audio(Duration::from_secs(3))?;
+    // Save to temp.wav
+    save_wav(&audio, "/tmp/fuchecode_audio.wav")?;
+    // Run whisper.cpp
+    let text = transcribe("/tmp/fuchecode_audio.wav")?;
+    Ok(text)
+}
+```
+
+**2. `main.rs` — Key binding**
+```rust
+if event == KeyCode::Char('v') {
+    println!("\n🎤 Listening... (3 seconds)");
+    let text = voice::record_and_transcribe()?;
+    println!("📝 You said: {}", text);
+    // Process as normal input
+}
+```
+
+**3. `whisper_setup.sh` — Install whisper.cpp**
+```bash
+git clone https://github.com/ggerganov/whisper.cpp
+cd whisper.cpp && make
+./models/download-ggml-model.sh base.en
+```
+
+---
+
+### Requirements:
+
+| Item | Size | Note |
+|------|------|------|
+| whisper.cpp | 10MB | Binary |
+| Model (base.en) | 150MB | Download once |
+| RAM usage | +200MB | During transcription |
+
+---
+
+### Pros / Cons:
+
+| Pros | Cons |
+|------|------|
+| ✅ Hands-free | ❌ 150MB model download |
+| ✅ Faster than typing | ❌ CPU intensive |
+| ✅ Works offline | ❌ 3-5s latency |
+| ✅ No API keys | ❌ Background noise issues |
+
+---
+
+### Alternative — Cloud Speech (Faster, smaller):
+
+```toml
+# Use OpenAI Whisper API (requires key)
+url = "https://api.openai.com/v1/audio/transcriptions"
+api_key = "$OPENAI_KEY"
+```
+
+**Pros:** 1s latency, no local model  
+**Cons:** Requires internet, costs money
+
+---
+
+### Estimated Time: 45 minutes
+
+**Ready to implement?** ✅ or want to start with Web UI (no dependencies)?
