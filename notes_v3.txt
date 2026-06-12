@@ -1,0 +1,32 @@
+FUCHECODE v3.0 — Build Notes
+
+🔥 New Features (v3)
+
+1. Memory
+   Save chat history between sessions
+
+2. Model Switcher
+   Switch models without editing code
+
+3. Config File
+   ~/.fuchecode/config.toml for settings
+
+4. Streaming
+   Real-time token-by-token response (true typewriter)
+
+5. Syntax Highlighting
+   Code blocks with colors
+
+Memory Implementation — Details:
+
+history.rs — JSONL storage (~/.fuchecode_history.json)
+
+Save — Every Q&A auto-appended with timestamp
+
+Load — Last 10 messages injected into AI context
+
+Commands — /history (show last 10), /clear (wipe all)
+
+Dependencies — Added chrono (timestamps) + dirs (home path)
+
+Files changed: history.rs (new), ollama.rs (history injection), main.rs (commands)

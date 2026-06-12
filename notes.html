@@ -1,276 +1,130 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>FUCHECODE · Build Notes</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap"
-            rel="stylesheet"
-        />
-        <style>
-            body {
-                font-family: "Inter", sans-serif;
-                background: #f8fafc;
-            }
-            code {
-                font-family: "JetBrains Mono", "Fira Code", monospace;
-                background: #f1f5f9;
-                padding: 2px 6px;
-                border-radius: 6px;
-                font-size: 0.85rem;
-            }
-            .timeline-dot {
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                position: absolute;
-                left: -6px;
-                top: 18px;
-            }
-        </style>
-    </head>
-    <body class="bg-slate-50 text-slate-700">
-        <div class="max-w-3xl mx-auto px-6 py-12">
-            <!-- Header -->
-            <div class="mb-10">
-                <div
-                    class="flex items-center gap-2 text-sm text-emerald-600 mb-4"
-                >
-                    <span
-                        class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"
-                    ></span>
-                    <span>build log · completed</span>
-                </div>
-                <h1 class="text-4xl font-bold text-slate-800 mb-2">
-                    fuchecode<span class="text-emerald-500">.log</span>
-                </h1>
-                <p class="text-slate-500">
-                    10 steps from zero to JARVIS · Rust CLI + Ollama (Qwen 480B)
-                </p>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUCHECODE · Build Notes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans">
+
+<div class="max-w-4xl mx-auto px-6 py-12">
+
+    <!-- Header -->
+    <div class="text-center mb-12">
+        <div class="inline-flex items-center gap-2 bg-emerald-500/10 rounded-full px-4 py-1 border border-emerald-500/30 mb-4">
+            <span class="text-emerald-400">🔥</span>
+            <span class="text-emerald-400 text-sm">FUCHECODE</span>
+        </div>
+        <h1 class="text-5xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-3">Build Notes</h1>
+        <p class="text-slate-400">Rust + Ollama · Function Calling · 2026</p>
+    </div>
+
+    <!-- v1.0 -->
+    <div class="mb-12">
+        <div class="inline-flex items-center gap-2 bg-emerald-500/10 rounded-full px-4 py-1 border border-emerald-500/30 mb-4">
+            <span class="text-emerald-400 text-sm">FUCHECODE v1.0</span>
+        </div>
+        <h2 class="text-3xl font-bold text-emerald-400 mb-2">Build Log</h2>
+        <p class="text-slate-400 mb-6">10 Features · Complete</p>
+
+        <div class="grid gap-3 mb-6">
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">1️⃣</span><span class="font-mono">Tool Calling</span><span class="text-slate-400 text-sm ml-auto">AI decides read_file/list_dir/clear</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">2️⃣</span><span class="font-mono">Directory Listing</span><span class="text-slate-400 text-sm ml-auto">📁 folders · 📄 files</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">3️⃣</span><span class="font-mono">File Reading</span><span class="text-slate-400 text-sm ml-auto">Silent read + AI context</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">4️⃣</span><span class="font-mono">Clear Screen</span><span class="text-slate-400 text-sm ml-auto">Native terminal clear</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">5️⃣</span><span class="font-mono">Braille Spinner</span><span class="text-slate-400 text-sm ml-auto">⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">6️⃣</span><span class="font-mono">Sci-fi Chirp</span><span class="text-slate-400 text-sm ml-auto">PowerShell beep on response</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">7️⃣</span><span class="font-mono">Modular Code</span><span class="text-slate-400 text-sm ml-auto">config/tools/spinner/ollama/ui/main</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">8️⃣</span><span class="font-mono">Clean UI</span><span class="text-slate-400 text-sm ml-auto">Box art + colored output</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">9️⃣</span><span class="font-mono">Auto Detection</span><span class="text-slate-400 text-sm ml-auto">"what's in src/" → list_dir</span></div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><span class="text-cyan-400 text-xl">🔟</span><span class="font-mono">Typewriter FX</span><span class="text-slate-400 text-sm ml-auto">Character-by-character (fast)</span></div>
+        </div>
+
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 text-center">
+            <div class="text-2xl mb-2">✅</div>
+            <div class="text-emerald-400 font-semibold">Production Ready</div>
+            <div class="text-sm text-slate-400 mt-1">Rust + Ollama + WSL · 2026</div>
+        </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="relative mb-12">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-700"></div></div>
+        <div class="relative flex justify-center"><span class="bg-slate-900 px-4 text-slate-500 text-sm">⬇ v2.0 Evolution ⬇</span></div>
+    </div>
+
+    <!-- v2.0 -->
+    <div>
+        <div class="inline-flex items-center gap-2 bg-emerald-500/10 rounded-full px-4 py-1 border border-emerald-500/30 mb-4">
+            <span class="text-emerald-400">🔥</span>
+            <span class="text-emerald-400 text-sm">FUCHECODE v2.0</span>
+            <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+        </div>
+        <h2 class="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2">Build Notes v2</h2>
+        <p class="text-slate-400 mb-6">Function Calling · Tool Use · AI-Decided File Reading</p>
+
+        <div class="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden mb-6">
+            <div class="border-b border-slate-700 px-5 py-3 bg-slate-800/80">
+                <span class="font-semibold">📋 New Features (v2)</span>
             </div>
-
-            <!-- Timeline -->
-            <div class="space-y-0 border-l-2 border-slate-200 ml-4">
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-red-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 01 · windows
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-red-500 font-bold">✗</span>
-                        <span
-                            ><code>cargo: command not found</code> — Rust not
-                            installed</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-emerald-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 02 · windows (powershell)
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-emerald-500 font-bold">✓</span>
-                        <span
-                            ><code>winget install Rustlang.Rustup</code> — Rust
-                            installed</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-red-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 03 · windows
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-red-500 font-bold">✗</span>
-                        <span
-                            ><code>link.exe not found</code> — Windows linker
-                            hell (MSVC nightmare)</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-emerald-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 04 · powershell → wsl
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-emerald-500 font-bold">✓</span>
-                        <span
-                            ><code>wsl --install</code> — Switched to WSL Ubuntu
-                            (bye bye linker hell)</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-emerald-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 05 · ubuntu (wsl)
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-emerald-500 font-bold">✓</span>
-                        <span
-                            ><code>curl https://sh.rustup.rs | sh</code> — Rust
-                            installed in WSL</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-red-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 06 · ubuntu → windows ollama
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-red-500 font-bold">✗</span>
-                        <span
-                            ><code>Connection refused (127.0.0.1:11434)</code> —
-                            WSL can't reach Windows localhost</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-emerald-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 07 · ubuntu (wsl)
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-emerald-500 font-bold">✓</span>
-                        <span
-                            ><code>ip route | awk '{print $3}'</code> — Found
-                            Windows IP: <code>172.23.240.1</code></span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-red-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 08 · ubuntu → windows
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-red-500 font-bold">✗</span>
-                        <span
-                            ><code>Connection timed out</code> — Windows
-                            firewall blocking WSL → port 11434</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div class="timeline-dot bg-emerald-500"></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 09 · windows (powershell)
-                    </div>
-                    <div class="flex items-start gap-2 flex-wrap">
-                        <span class="text-emerald-500 font-bold">✓</span>
-                        <span
-                            ><code
-                                >$env:OLLAMA_HOST="0.0.0.0"; ollama serve</code
-                            >
-                            — Bound Ollama to network interface</span
-                        >
-                    </div>
-                </div>
-
-                <div class="relative pl-6 pb-6">
-                    <div
-                        class="timeline-dot bg-emerald-500 ring-4 ring-emerald-200"
-                    ></div>
-                    <div class="text-xs text-slate-400 mb-1">
-                        step 10 · ubuntu (wsl) → windows ollama
-                    </div>
-                    <div
-                        class="flex items-start gap-2 flex-wrap bg-emerald-50 p-3 rounded-lg -ml-3 border border-emerald-200"
-                    >
-                        <span class="text-emerald-600 font-bold">✅</span>
-                        <span class="font-medium text-slate-800"
-                            >FUCHECODE LIVE — "Hello! How can I help you
-                            today?"</span
-                        >
-                        <span class="text-xs text-slate-500 ml-auto"
-                            >powershell (ollama host) + ubuntu bash
-                            (fuchecode)</span
-                        >
-                    </div>
-                </div>
-            </div>
-
-            <!-- Architecture note -->
-            <div
-                class="mt-10 bg-white border border-slate-200 rounded-xl p-5 text-sm text-slate-600"
-            >
-                <div
-                    class="flex items-center gap-2 text-slate-700 font-semibold mb-2"
-                >
-                    <span>🔧</span> final architecture
-                </div>
-                <div class="grid grid-cols-2 gap-3 text-xs">
-                    <div class="bg-slate-50 p-2 rounded">
-                        🪟 windows: <code>OLLAMA_HOST="0.0.0.0"</code> → ollama
-                        serves on port 11434
-                    </div>
-                    <div class="bg-slate-50 p-2 rounded">
-                        🐧 wsl ubuntu: fuchecode (rust cli) → connects to
-                        <code>172.23.240.1:11434</code>
-                    </div>
-                </div>
-                <div
-                    class="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400"
-                >
-                    $env:OLLAMA_HOST="0.0.0.0" # windows powershell ⚡ cargo run
-                    # inside wsl bash 🦀
-                </div>
-            </div>
-
-            <!-- Running Locally -->
-            <div class="mt-10 bg-white border border-slate-200 rounded-xl p-5 text-sm text-slate-600">
-                <div class="flex items-center gap-2 text-slate-700 font-semibold mb-2">
-                    <span>🚀</span> run it (linux / wsl)
-                </div>
-                <div class="space-y-3 text-xs">
-                    <p class="text-slate-500 font-medium mb-1">quick start (requires Ollama running):</p>
-                    <div class="bg-slate-900 text-slate-200 p-3 rounded-lg font-mono text-xs leading-relaxed">
-                        <span class="text-emerald-400"># make executable &amp; run</span><br />
-                        chmod +x fuchecode.sh<br />
-                        ./fuchecode.sh
-                    </div>
-                    <p class="text-slate-500 font-medium mb-1">or directly with cargo:</p>
-                    <div class="bg-slate-900 text-slate-200 p-3 rounded-lg font-mono text-xs leading-relaxed">
-                        <span class="text-emerald-400"># clean build &amp; run</span><br />
-                        cd ~/projects/fuchecode<br />
-                        cargo clean &amp;&amp; cargo run
-                    </div>
-                    <p class="text-slate-500 font-medium mb-1">prerequisites:</p>
-                    <ul class="list-disc list-inside text-slate-500 space-y-1">
-                        <li>Rust toolchain (via <code>rustup</code>)</li>
-                        <li>Ollama serving on <code>localhost:11434</code></li>
-                        <li>A model pulled (e.g. <code>ollama pull qwen2.5:72b</code>)</li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <div
-                class="mt-10 text-center text-xs text-slate-400 border-t border-slate-200 pt-6"
-            >
-                fuchecode · rust + wsl + ollama · 2026
+            <div class="p-5 space-y-3">
+                <div class="flex gap-3 text-sm"><span class="text-cyan-400 w-32">Function Calling</span><span class="text-slate-300">AI decides which tool to call, no hardcoded commands</span></div>
+                <div class="flex gap-3 text-sm"><span class="text-cyan-400 w-32">Tool Use</span><span class="text-slate-300">read_file, execute_command, search_files</span></div>
+                <div class="flex gap-3 text-sm"><span class="text-cyan-400 w-32">File Awareness</span><span class="text-slate-300">AI reads file content before answering</span></div>
+                <div class="flex gap-3 text-sm"><span class="text-cyan-400 w-32">Intent Detection</span><span class="text-slate-300">AI understands "what's in notes.html" automatically</span></div>
             </div>
         </div>
-    </body>
-</html>
 
-## v2 Features
-- Colored TUI
-- Modular code
-- Shell exec (ls/cat)
-- Typewriter effect
-- Function Calling (AI decides to read files)
+        <div class="grid md:grid-cols-2 gap-5 mb-6">
+            <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5">
+                <div class="text-2xl mb-2">🧠</div>
+                <div class="font-semibold text-emerald-400">Before (v1)</div>
+                <div class="text-sm text-slate-400 mt-1">Hardcoded: if input starts with "cat" → read file</div>
+            </div>
+            <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-5">
+                <div class="text-2xl mb-2">🤖</div>
+                <div class="font-semibold text-cyan-400">After (v2)</div>
+                <div class="text-sm text-slate-400 mt-1">AI decides: "User wants file content" → calls read_file</div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden mb-6">
+            <div class="bg-slate-800/80 px-5 py-3 border-b border-slate-700">
+                <span class="text-sm font-mono text-emerald-400">🔧 Tool Definition (Ollama)</span>
+            </div>
+            <pre class="p-5 overflow-x-auto text-xs font-mono text-slate-300"><code>{
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "description": "Read a file from the filesystem",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "File path"}
+        }
+      }
+    }
+  }]
+}</code></pre>
+        </div>
+
+        <div class="bg-slate-800/30 rounded-xl border border-slate-700 p-5 mb-6">
+            <div class="text-sm text-slate-400 mb-2">📌 Example Conversation</div>
+            <div class="font-mono text-sm space-y-2">
+                <div><span class="text-blue-400">User:</span> "What's inside notes.html?"</div>
+                <div><span class="text-emerald-400">AI:</span> *calls read_file("notes.html")*</div>
+                <div><span class="text-emerald-400">AI:</span> "The file contains build logs from June 12: step 1-10..."</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
+        FUCHECODE · Rust + Ollama + Function Calling · June 2026
+    </div>
+</div>
+
+</body>
+</html>

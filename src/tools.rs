@@ -33,3 +33,25 @@ pub fn list_dir(path: &str) -> String {
         Err(e) => format!("Error: {}", e),
     }
 }
+
+pub fn search_content(pattern: &str, path: &str) -> String {
+    let path = if path.is_empty() { "." } else { path };
+    print!("\r🔍 '{}' in {}... ", pattern, path);
+    let _ = io::stdout().flush();
+    
+    let mut results = Vec::new();
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if content.contains(pattern) {
+                        results.push(p.file_name().unwrap().to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+    if results.is_empty() { "No matches".to_string() } 
+    else { format!("Found in: {}", results.join(", ")) }
+}
