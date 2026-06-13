@@ -81,8 +81,17 @@ pub fn read_cpu_freq_mhz() -> f64 {
         .unwrap_or(0.0)
 }
 
+
+
 pub fn read_cpu_temp() -> Option<f64> {
-    let s = std::fs::read_to_string("/sys/class/thermal/thermal_zone0/temp").ok()?;
-    let t = s.trim().parse::<f64>().ok()?;
-    Some(t / 1000.0)
+    std::fs::read_to_string("/sys/class/thermal/thermal_zone0/temp")
+        .ok()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .map(|t| t / 1000.0)
+        .or_else(|| {
+            std::fs::read_to_string("/sys/class/hwmon/hwmon0/temp1_input")
+                .ok()
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .map(|t| t / 1000.0)
+        })
 }
