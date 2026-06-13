@@ -10,7 +10,7 @@ use ratatui::{
 };
 use std::collections::VecDeque;
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::Child;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
@@ -211,51 +211,132 @@ fn bio_bar(val: f64, max: f64, invert: bool) -> String {
     format!("{} {:>3}%", bar, (pct * 100.0).round() as u8)
 }
 
-fn play_chime() {
-    std::thread::spawn(|| {
-        let _ = std::panic::catch_unwind(|| {
-            use rodio::Source;
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
-            let notes = [523.25, 659.25, 783.99];
-            for &freq in &notes {
-                let source = rodio::source::SineWave::new(freq)
-                    .take_duration(std::time::Duration::from_millis(180))
-                    .amplify(0.15);
-                if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { break; }
-                std::thread::sleep(std::time::Duration::from_millis(180));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(250));
-        });
-    });
+struct AudioState {
+    songs: Vec<String>,
+    current: usize,
+    child: Option<Child>,
+    play_start: Instant,
+    amp_envelope: Vec<f64>,
+    sample_rate: f64,
+    envelope_ready: bool,
+    track_name: String,
 }
 
-fn play_acdc(stop: Arc<AtomicBool>) {
+fn scan_mp3s() -> Vec<String> {
+    let dir = "/mnt/c/Users/ACER/Downloads/Music/ACDC";
+    let mut songs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "mp3").unwrap_or(false) {
+                songs.push(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    songs.sort();
+    songs
+}
+
+fn wsl_to_win(wsl: &str) -> Option<String> {
+    let out = std::process::Command::new("wslpath")
+        .args(["-w", wsl]).output().ok()?;
+    if out.status.success() {
+        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else { None }
+}
+
+fn pick_random(len: usize, exclude: Option<usize>) -> usize {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap()
+        .subsec_nanos() as usize;
+    let mut idx = nanos % len;
+    if let Some(ex) = exclude {
+        if len > 1 && idx == ex { idx = (idx + 1) % len; }
+    }
+    idx
+}
+
+fn decode_envelope(path: &str) -> Option<(Vec<f64>, f64)> {
+    use rodio::Source;
+    let file = std::fs::File::open(path).ok()?;
+    let source = rodio::Decoder::new(std::io::BufReader::new(file)).ok()?;
+    let sample_rate = source.sample_rate() as f64;
+    let window = (sample_rate * 0.05) as usize;
+    let samples: Vec<f32> = source.convert_samples::<f32>().collect();
+    let mut envelope = Vec::with_capacity(samples.len() / window + 1);
+    for chunk in samples.chunks(window) {
+        if chunk.is_empty() { continue; }
+        let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+        envelope.push(rms as f64);
+    }
+    let max = envelope.iter().fold(0.0f64, |a, &b| a.max(b));
+    if max > 0.0 { for v in &mut envelope { *v /= max; } }
+    Some((envelope, sample_rate))
+}
+
+fn extract_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_stem().and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string()
+}
+
+fn play_song(state: &Arc<Mutex<AudioState>>) {
+    let mut s = state.lock().unwrap();
+    if let Some(mut child) = s.child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    if s.songs.len() > 1 {
+        let next = pick_random(s.songs.len(), Some(s.current));
+        s.current = next;
+    }
+    let path = s.songs[s.current].clone();
+    s.track_name = extract_name(&path);
+    if let Some(win) = wsl_to_win(&path) {
+        let cmd = format!(
+            "Add-Type -AssemblyName PresentationCore; \
+             $p = New-Object System.Windows.Media.MediaPlayer; \
+             $p.Open('{}'); $p.Play(); Start-Sleep 9999", win);
+        if let Ok(c) = std::process::Command::new("powershell.exe")
+            .args(["-Command", &cmd]).spawn()
+        { s.child = Some(c); }
+    }
+    s.play_start = Instant::now();
+    s.envelope_ready = false;
+    s.amp_envelope.clear();
+    let state2 = state.clone();
     std::thread::spawn(move || {
-        let _ = std::panic::catch_unwind(|| {
-            use rodio::Source;
-            let path = "/mnt/c/Users/ACER/Downloads/Music/ACDC/Power Up (Prerelease Version) - AC-DC - Free Download, Borrow, and Streaming - Internet Archive.mp3";
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
-            let file = match std::fs::File::open(path) {
-                Ok(f) => f,
-                Err(_) => return,
-            };
-            let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) else { return; };
-            if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { return; }
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                if stop.load(Ordering::Relaxed) { break; }
-            }
-        });
+        if let Some((env, sr)) = decode_envelope(&path) {
+            let mut st = state2.lock().unwrap();
+            st.amp_envelope = env;
+            st.sample_rate = sr;
+            st.envelope_ready = true;
+        }
     });
 }
 
-pub async fn run(greeting: String) {
+pub async fn run() {
+    let songs = scan_mp3s();
+    if songs.is_empty() {
+        eprintln!("No MP3s found in ACDC folder");
+        return;
+    }
+    let state = Arc::new(Mutex::new(AudioState {
+        songs,
+        current: pick_random(0, None), // placeholder, play_song recalculates
+        child: None,
+        play_start: Instant::now(),
+        amp_envelope: Vec::new(),
+        sample_rate: 44100.0,
+        envelope_ready: false,
+        track_name: String::new(),
+    }));
+    play_song(&state);
+
     let mut terminal = ratatui::init();
     crossterm::terminal::enable_raw_mode().ok();
     crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture).ok();
-    play_chime();
-    let stop_audio = Arc::new(AtomicBool::new(false));
-    play_acdc(stop_audio.clone());
 
     let mut globe = WireframeGlobe::new(1.0);
     let mut frame_count = 0u64;
@@ -329,6 +410,14 @@ pub async fn run(greeting: String) {
             last_telemetry = Instant::now();
         }
 
+        let audio_state = state.lock().unwrap();
+        let track = audio_state.track_name.clone();
+        let env_ready = audio_state.envelope_ready;
+        let env = audio_state.amp_envelope.clone();
+        let env_sr = audio_state.sample_rate;
+        let play_time = audio_state.play_start.elapsed().as_secs_f64();
+        drop(audio_state);
+
         terminal
             .draw(|f| {
                 let area = f.area();
@@ -347,7 +436,7 @@ pub async fn run(greeting: String) {
 
                 let vert = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(1), Constraint::Length(1)])
+                    .constraints([Constraint::Min(1), Constraint::Length(2)])
                     .split(inner);
 
                 let horiz = Layout::default()
@@ -483,20 +572,59 @@ pub async fn run(greeting: String) {
                 bio_text.push_line(Line::from(format!("Cort {:.0}nM {}", bio.cortisol, bio_bar(bio.cortisol, 30.0, true))));
                 f.render_widget(Paragraph::new(bio_text).style(bfg), bio_inner);
 
-                let bottom = Paragraph::new(greeting.as_str())
+                // ── bottom area: two rows ──
+                let bchunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(1), Constraint::Length(1)])
+                    .split(vert[1]);
+
+                let info = format!("Jarvis Online ⚡  ·  ♫ {}    < > skip", track);
+                let bottom = Paragraph::new(info)
                     .style(Style::default().fg(Color::Rgb(0, 230, 200)))
                     .alignment(Alignment::Center);
-                f.render_widget(bottom, vert[1]);
+                f.render_widget(bottom, bchunks[0]);
+
+                if env_ready && !env.is_empty() {
+                    let bw = bchunks[1].width as usize;
+                    let env_idx = (play_time * env_sr / 50.0) as usize;
+                    let half = bw / 2;
+                    let start = env_idx.saturating_sub(half);
+                    let end = (start + bw).min(env.len());
+                    let start = end.saturating_sub(bw);
+                    let mut wav_spans = Vec::with_capacity(bw);
+                    for i in start..end {
+                        let idx = (env[i] * 7.0).round() as usize;
+                        wav_spans.push(Span::styled(SPARK[idx.min(7)].to_string(), fg));
+                    }
+                    let wav_line = Paragraph::new(Line::from(wav_spans))
+                        .style(fg)
+                        .alignment(Alignment::Center);
+                    f.render_widget(wav_line, bchunks[1]);
+                }
             })
             .ok();
 
         if crossterm::event::poll(Duration::from_millis(33)).ok().unwrap_or(false) {
             if let Ok(crossterm::event::Event::Key(k)) = crossterm::event::read() {
-                if k.code == crossterm::event::KeyCode::Esc {
-                    stop_audio.store(true, Ordering::Relaxed);
-                    break;
+                match k.code {
+                    crossterm::event::KeyCode::Esc => break,
+                    crossterm::event::KeyCode::Char(',') | crossterm::event::KeyCode::Char('<') => {
+                        play_song(&state);
+                    }
+                    crossterm::event::KeyCode::Char('.') | crossterm::event::KeyCode::Char('>') => {
+                        play_song(&state);
+                    }
+                    _ => {}
                 }
             }
+        }
+    }
+
+    // Kill audio on exit
+    if let Ok(mut s) = state.lock() {
+        if let Some(mut child) = s.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 

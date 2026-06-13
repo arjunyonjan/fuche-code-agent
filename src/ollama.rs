@@ -112,42 +112,6 @@ pub async fn single_turn(
     }
 }
 
-pub async fn simple_chat(
-    api_url: &str,
-    model: &str,
-    prompt: &str,
-    timeout_secs: u64,
-) -> String {
-    let client = make_client(timeout_secs);
-    let is_ollama_api = api_url.contains("/api/chat");
-    let messages = vec![
-        json!({"role": "system", "content": "You are JARVIS, Tony Stark's AI assistant. Answer in 5 words or fewer. Never use emojis."}),
-        json!({"role": "user", "content": prompt}),
-    ];
-    let body = json!({"model": model, "messages": messages, "stream": false});
-    let mut req = client.post(api_url).json(&body);
-    if api_url.contains("integrate.api.nvidia.com") {
-        let key = std::env::var("NVIDIA_API_KEY").unwrap_or_default();
-        if !key.is_empty() {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
-    }
-    match req.send().await {
-        Ok(resp) if resp.status().is_success() => {
-            let json: serde_json::Value = resp.json().await.unwrap_or_default();
-            (if is_ollama_api {
-                json["message"]["content"].as_str()
-            } else {
-                json["choices"][0]["message"]["content"].as_str()
-            })
-            .unwrap_or("Good morning, sir.")
-            .trim()
-            .to_string()
-        }
-        _ => "Good morning, sir.".to_string(),
-    }
-}
-
 const SYSTEM_PROMPT: &str = "You MUST use the run_command tool for ANY terminal command, file operation, web request, or system task. NEVER generate fake command output yourself — always call the tool. After the tool returns, briefly summarize the result. For editing files use `sed -i` to edit in place. For opening files use `xdg-open <file>`. NEVER install packages or start servers unless the user explicitly asks. NEVER fake a result — always call the tool. When the user asks to update/create/edit/modify a file, you MUST call run_command to write the file. NEVER just show the new content in your response — write it to the file. Answer within 5 lines in simple layman terms. No jargon.";
 
 fn tool_defs() -> Value {
