@@ -1,0 +1,2358 @@
+=== FUCHECODE RUST SOURCE DUMP Sat Jun 13 18:17:48 UTC 2026 ===
+=== src/commands.rs ===
+use std::io::{self, Write};
+use colored::*;
+use crate::history;
+use crate::ui;
+use crate::ollama;
+use crate::config::Config;
+
+fn rl(s: &str) {
+    print!("\r{}\n", s);
+    let _ = io::stdout().flush();
+}
+
+pub async fn handle(input: &str, current_model: &mut String, cfg: &mut Config) -> Result<bool, Box<dyn std::error::Error>> {
+    match input {
+        "/help" => {
+            rl("");
+            rl("📚 FUCHECODE Commands");
+            rl("");
+            rl("  /help           - Show this help");
+            rl("  /model          - Show current model");
+            rl("  /model <name>   - Switch model");
+            rl("  /models         - List & select from provider models");
+            rl("  /provider       - Switch provider (ollama/nvidia/clawrouter)");
+            rl("  /providers      - List available providers");
+            rl("  /history        - Show last 10 messages");
+            rl("  /clear          - Clear conversation history");
+            rl("  /cd <path>      - Change working directory");
+            rl("  /status         - Show system status");
+            rl("  /save           - Export conversation to file");
+            rl("  /health        - View/set health biomarkers");
+            rl("  exit            - Quit fuchecode");
+            rl("");
+            Ok(true)
+        }
+        "/status" => {
+            let history_count = history::load_last(9999).len();
+            rl("");
+            rl("📊 Status:");
+            rl(&format!("  Provider: {}", cfg.current_provider));
+            rl(&format!("  Model: {}", current_model));
+            rl(&format!("  API: {}", cfg.api_url()));
+            rl(&format!("  Timeout: {}s", cfg.timeout_secs));
+            rl(&format!("  History: {} messages", history_count));
+			rl("  Config: ~/.fuchecode/config.toml");
+			if let Ok(cwd) = std::env::current_dir() {
+				rl(&format!("  CWD: {}", cwd.display()));
+			}
+			rl("");
+            Ok(true)
+        }
+        "/save" => {
+            let history = history::load_last(9999);
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs();
+            let filename = format!("/home/arjun/fuchecode_export_{}.md", timestamp);
+            let mut content = String::from("# FUCHECODE Conversation Export\n\n");
+            for msg in history {
+                let role = msg["role"].as_str().unwrap_or("");
+                let text = msg["content"].as_str().unwrap_or("");
+                if role == "user" {
+                    content.push_str(&format!("## 👤 User\n{}\n\n", text));
+                } else if role == "assistant" {
+                    content.push_str(&format!("## 🤖 Assistant\n{}\n\n", text));
+                }
+            }
+            std::fs::write(&filename, content)?;
+            rl("");
+            rl(&format!("💾 Exported to: {}", filename));
+            rl("");
+            Ok(true)
+        }
+        "/history" => {
+            rl("");
+            rl("📜 Last 10 messages:");
+            for msg in history::load_last(10) {
+                let role = msg["role"].as_str().unwrap_or("");
+                let content = msg["content"].as_str().unwrap_or("");
+                if role == "user" {
+                    rl(&format!("  🧑 You: {}", content));
+                } else if role == "assistant" {
+                    rl(&format!("  🤖 AI: {}", content));
+                }
+            }
+            rl("");
+            Ok(true)
+        }
+        "/clear" => {
+            history::clear();
+            rl("");
+            rl("🗑️ History cleared.");
+            rl("");
+            Ok(true)
+        }
+        "/cd" => {
+            match std::env::current_dir() {
+                Ok(p) => { rl(&format!("📂 Current: {}", p.display())); rl(""); }
+                Err(_) => { rl("❌ Cannot get CWD"); rl(""); }
+            }
+            Ok(true)
+        }
+        _ if input.starts_with("/cd ") => {
+            let raw = input[4..].trim();
+            let path = if raw.starts_with("~/") || raw == "~" {
+                let home = std::env::var("HOME").unwrap_or_default();
+                format!("{}{}", home, &raw[1..])
+            } else {
+                raw.to_string()
+            };
+            match std::env::set_current_dir(&path) {
+                Ok(_) => { rl(&format!("✅ CWD changed to: {}", path)); rl(""); }
+                Err(e) => { rl(&format!("❌ Error: {}", e)); rl(""); }
+            }
+            Ok(true)
+        }
+        "/providers" => {
+            rl("");
+            rl("📡 Available providers:");
+            for name in cfg.provider_names() {
+                let marker = if name == cfg.current_provider { "➡️ " } else { "   " };
+                let url = cfg.providers.get(&name).map(|p| p.url.as_str()).unwrap_or("");
+                rl(&format!("  {}{}  ({})", marker, name.cyan(), url.dimmed()));
+            }
+            rl("");
+            rl("  Use /provider <name> to switch");
+            rl("");
+            Ok(true)
+        }
+        "/provider" => {
+            rl(&format!("📡 Current provider: {}", cfg.current_provider.cyan()));
+            rl("");
+            Ok(true)
+        }
+        _ if input.starts_with("/provider ") => {
+            let name = &input[10..];
+            if cfg.providers.contains_key(name) {
+                cfg.current_provider = name.to_string();
+                cfg.save();
+                rl(&format!("✅ Switched provider to: {}", name));
+                rl(&format!("   API: {}", cfg.api_url()));
+
+                if name == "clawrouter" {
+                    let online = crate::ollama::check_cr_status().await;
+                    if online {
+                        rl("   🟢 ClawRouter active at :8402");
+                    } else {
+                        rl("   🔴 ClawRouter offline — run: npx @blockrun/clawrouter@latest");
+                    }
+                }
+
+                rl("");
+                print!("\x1B[2J\x1B[1;1H");
+                ui::header(current_model);
+            } else {
+                rl(&format!("❌ Unknown provider: {}", name));
+                rl(&format!("   Available: {}", cfg.provider_names().join(", ")));
+                rl("");
+            }
+            Ok(true)
+        }
+        _ if input.starts_with("/model ") => {
+            let new_model = &input[7..];
+            if !new_model.is_empty() {
+                *current_model = new_model.to_string();
+                rl(&format!("✅ Switched to: {}", current_model));
+                rl("");
+                print!("\x1B[2J\x1B[1;1H");
+                ui::header(current_model);
+            }
+            Ok(true)
+        }
+        "/model" => {
+            rl(&format!("📌 Current model: {}", current_model));
+            rl("");
+            Ok(true)
+        }
+        "/models" | "/models all" => {
+            let show_all = input == "/models all";
+            let api_url = cfg.api_url();
+            rl("");
+            rl("📋 Fetching available models...");
+            match ollama::list_models(&api_url, cfg.timeout_secs).await {
+                Ok(models) => {
+                    if models.is_empty() {
+                        rl("  No models found.");
+                        rl("");
+                        return Ok(true);
+                    }
+
+                    let display: Vec<&String> = if show_all {
+                        models.iter().collect()
+                    } else {
+                        models.iter().filter(|m| m.starts_with("free/")).collect()
+                    };
+
+                    if display.is_empty() {
+                        rl(&format!("  No free models found. Use /models all to see all {} models.", models.len()));
+                        rl("");
+                        return Ok(true);
+                    }
+
+                    rl("");
+                    let total = if show_all { format!(" — {} total", models.len()) } else { format!(" — {} free ({} total, use /models all for full)", display.len(), models.len()) };
+                    rl(&format!("{}", format!("┌─ Models{} ────────────────┐", total).cyan()));
+                    for (i, name) in display.iter().enumerate() {
+                        rl(&format!("│ {:<3} {}  │", format!("{}.", i + 1).bright_green(), name));
+                    }
+                    rl(&format!("{}", "└────────────────────────────────────────────┘".cyan()));
+                    rl("");
+
+                    rl("Enter model number to switch, or 0 to cancel:");
+                    rl("");
+                    ui::user_prompt_with_mode(&crate::mode::Mode::Build);
+
+                    let mut sel = String::new();
+                    io::stdin().read_line(&mut sel)?;
+                    let sel = sel.trim();
+
+                    if let Ok(n) = sel.parse::<usize>() {
+                        if n > 0 && n <= display.len() {
+                            let chosen = &display[n - 1];
+                            *current_model = (*chosen).clone();
+                            rl(&format!("✅ Switched to: {}", current_model));
+                            rl("");
+                            print!("\x1B[2J\x1B[1;1H");
+                            ui::header(current_model);
+                        } else if n == 0 {
+                            rl("Canceled.");
+                            rl("");
+                        } else {
+                            rl("Invalid selection.");
+                            rl("");
+                        }
+                    } else {
+                        rl("Invalid input.");
+                        rl("");
+                    }
+                }
+                Err(e) => {
+                    rl(&format!("❌ Failed to fetch models: {}", e));
+                    rl("");
+                }
+            }
+            Ok(true)
+        }
+        "/magic" => {
+            crate::magic::run().await;
+            Ok(true)
+        }
+        _ if input.starts_with("/health ") => {
+            let rest = &input[8..];
+            let mut parts = rest.splitn(2, ' ');
+            let metric = parts.next().unwrap_or("");
+            let value = parts.next().unwrap_or("").parse::<f64>().ok();
+            let mut bio = crate::magic::BIOMARKERS.lock().unwrap();
+            match metric {
+                "sleep" => { bio.sleep_hours = value.unwrap_or(0.0); rl(&format!("😴 Sleep set to {:.1}h", bio.sleep_hours)); }
+                "water" | "hydration" => { bio.hydration_l = value.unwrap_or(0.0); rl(&format!("💧 Hydration set to {:.1}L", bio.hydration_l)); }
+                "vitd" | "vitamin-d" => { bio.vitamin_d = value.unwrap_or(0.0); rl(&format!("☀️ Vitamin D set to {:.0} ng/mL", bio.vitamin_d)); }
+                "cortisol" => { bio.cortisol = value.unwrap_or(0.0); rl(&format!("🧪 Cortisol set to {:.0} nM", bio.cortisol)); }
+                _ => {
+                    rl("");
+                    rl("📋 Usage:  /health <metric> <value>");
+                    rl("");
+                    rl("  sleep     — hours slept (0-10)");
+                    rl("  water     — hydration in liters (0-4)");
+                    rl("  vitd      — vitamin D ng/mL (0-100)");
+                    rl("  cortisol  — cortisol nM (0-30)");
+                    rl("");
+                    rl("Current:");
+                    rl(&format!("  😴 Sleep:  {:.1}h", bio.sleep_hours));
+                    rl(&format!("  💧 Water:  {:.1}L", bio.hydration_l));
+                    rl(&format!("  ☀️ Vit D:  {:.0} ng/mL", bio.vitamin_d));
+                    rl(&format!("  🧪 Cort:   {:.0} nM", bio.cortisol));
+                    rl("");
+                }
+            }
+            rl("");
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+=== src/config.rs ===
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProviderDef {
+    pub url: String,
+}
+
+fn default_magic_audio_dir() -> String {
+    "/mnt/c/Users/ACER/Downloads/Music/ACDC".into()
+}
+
+fn default_magic_volume() -> f64 { 0.5 }
+fn default_magic_muted() -> bool { false }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub current_provider: String,
+    pub default_model: String,
+    pub providers: HashMap<String, ProviderDef>,
+    pub timeout_secs: u64,
+    pub history_limit: usize,
+    pub show_tokens: bool,
+    #[serde(default = "default_magic_audio_dir")]
+    pub magic_audio_dir: String,
+    #[serde(default = "default_magic_volume")]
+    pub magic_volume: f64,
+    #[serde(default = "default_magic_muted")]
+    pub magic_muted: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let mut providers = HashMap::new();
+        providers.insert("ollama".into(), ProviderDef {
+            url: "http://172.23.240.1:11434/api/chat".into(),
+        });
+        providers.insert("nvidia".into(), ProviderDef {
+            url: "https://integrate.api.nvidia.com/v1/chat/completions".into(),
+        });
+        providers.insert("clawrouter".into(), ProviderDef {
+            url: "http://localhost:3777/v1/chat/completions".into(),
+        });
+        Self {
+            current_provider: "nvidia".into(),
+            default_model: "deepseek-ai/deepseek-v4-flash".into(),
+            providers,
+            timeout_secs: 15,
+            history_limit: 20,
+            show_tokens: true,
+            magic_audio_dir: "/mnt/c/Users/ACER/Downloads/Music/ACDC".into(),
+            magic_volume: 0.5,
+            magic_muted: false,
+        }
+    }
+}
+
+impl Config {
+    pub fn load() -> Self {
+        let path = Self::get_config_path();
+        let config = if path.exists() {
+            let contents = fs::read_to_string(path).unwrap_or_default();
+            toml::from_str(&contents).unwrap_or_else(|_| Self::default())
+        } else {
+            Self::default()
+        };
+        config.save();
+        config
+    }
+
+    pub fn save(&self) {
+        let path = Self::get_config_path();
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        if let Ok(contents) = toml::to_string_pretty(self) {
+            let _ = fs::write(path, contents);
+        }
+    }
+
+    pub fn api_url(&self) -> String {
+        self.providers
+            .get(&self.current_provider)
+            .map(|p| p.url.clone())
+            .unwrap_or_else(|| {
+                self.providers.values().next()
+                    .map(|p| p.url.clone())
+                    .unwrap_or_default()
+            })
+    }
+
+    pub fn provider_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.providers.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    fn get_config_path() -> PathBuf {
+        dirs::home_dir().expect("HOME not set").join(".fuchecode").join("config.toml")
+    }
+}
+=== src/history.rs ===
+use std::fs::{self, OpenOptions};
+use std::io::{Write, BufRead, BufReader};
+use serde_json::{json, Value};
+use std::path::PathBuf;
+
+fn get_history_path() -> PathBuf {
+    dirs::home_dir().expect("HOME not set").join(".fuchecode_history.json")
+}
+
+pub fn save(user_msg: &str, assistant_msg: &str) {
+    let path = get_history_path();
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let entry = json!({
+            "role": "user",
+            "content": user_msg,
+            "timestamp": chrono::Utc::now().timestamp()
+        });
+        let _ = writeln!(file, "{entry}");
+
+        let entry = json!({
+            "role": "assistant",
+            "content": assistant_msg,
+            "timestamp": chrono::Utc::now().timestamp()
+        });
+        let _ = writeln!(file, "{entry}");
+    }
+}
+
+pub fn load_last(n: usize) -> Vec<Value> {
+    let path = get_history_path();
+    if !path.exists() { return vec![]; }
+    
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return vec![],
+    };
+    let reader = BufReader::new(file);
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let last_n = lines.iter().rev().take(n).rev();
+    
+    last_n.filter_map(|line| serde_json::from_str(line).ok()).collect()
+}
+
+pub fn clear() {
+    let path = get_history_path();
+    let _ = fs::remove_file(path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clear_missing_file_no_panic() {
+        clear();
+    }
+
+    #[test]
+    fn test_history_path_has_correct_name() {
+        let path = get_history_path();
+        assert!(path.to_string_lossy().ends_with(".fuchecode_history.json"));
+    }
+
+    #[test]
+    fn test_jsonl_roundtrip() {
+        let path = PathBuf::from("/tmp/fuchecode_test_jsonl.json");
+        {
+            let mut file = OpenOptions::new().create(true).append(true).open(&path).unwrap();
+            let entry = json!({"role": "user", "content": "hi", "timestamp": 0});
+            writeln!(file, "{entry}").unwrap();
+            let entry = json!({"role": "assistant", "content": "hey", "timestamp": 1});
+            writeln!(file, "{entry}").unwrap();
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["role"], "user");
+        assert_eq!(lines[0]["content"], "hi");
+        assert_eq!(lines[1]["role"], "assistant");
+        assert_eq!(lines[1]["content"], "hey");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_corrupted_line_skipped() {
+        let path = PathBuf::from("/tmp/fuchecode_test_corrupt.json");
+        {
+            let mut file = fs::File::create(&path).unwrap();
+            writeln!(file, r#"{{"role": "user", "content": "good", "timestamp": 1}}"#).unwrap();
+            writeln!(file, "not valid json").unwrap();
+            writeln!(file, r#"{{"role": "assistant", "content": "ok", "timestamp": 2}}"#).unwrap();
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert_eq!(lines.len(), 2);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_empty_file() {
+        let path = PathBuf::from("/tmp/fuchecode_test_empty.json");
+        fs::write(&path, "").unwrap();
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert!(lines.is_empty());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_last_n_filter() {
+        let path = PathBuf::from("/tmp/fuchecode_test_lastn.json");
+        {
+            let mut file = fs::File::create(&path).unwrap();
+            for i in 0..5 {
+                let entry = json!({"role": "user", "content": i.to_string(), "timestamp": i});
+                writeln!(file, "{entry}").unwrap();
+            }
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+        let last_n: Vec<Value> = lines.iter()
+            .rev().take(3).rev()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+
+        assert_eq!(last_n.len(), 3);
+        assert_eq!(last_n[0]["content"], "2");
+        assert_eq!(last_n[2]["content"], "4");
+        let _ = fs::remove_file(&path);
+    }
+}
+=== src/main.rs ===
+mod config;
+mod ollama;
+mod ui;
+mod mode;
+mod spinner;
+mod history;
+mod commands;
+mod tools;
+mod popup;
+mod magic;
+mod mapper;
+
+use std::io::{self, Write};
+use colored::*;
+use mode::Mode;
+use tokio::select;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cfg = config::Config::load();
+    let mut current_model = cfg.default_model.clone();
+    let mut current_mode = Mode::Build;
+
+    print!("\x1B[2J\x1B[1;1H");
+    ui::header_with_mode(&current_model, &current_mode);
+    let cr_online = if cfg.current_provider == "clawrouter" {
+        ollama::check_cr_status().await
+    } else {
+        false
+    };
+    ui::show_guide(&cfg.current_provider, cr_online);
+
+    loop {
+        ui::user_prompt_with_mode(&current_mode);
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let input = input.trim();
+
+        if input == "exit" || input == "/exit" { break; }
+        if input.is_empty() { continue; }
+
+        if input == "/" {
+            let cmd = popup::show();
+            if cmd.is_empty() { continue; }
+            if cmd == "/exit" { break; }
+            if cmd == "/mode" {
+                current_mode = current_mode.toggle();
+                print!("\x1B[2J\x1B[1;1H");
+                ui::header_with_mode(&current_model, &current_mode);
+                continue;
+            }
+            if commands::handle(&cmd, &mut current_model, &mut cfg).await? {
+                continue;
+            }
+            continue;
+        }
+
+        if input == "tab" || input == "/mode" {
+            current_mode = current_mode.toggle();
+            print!("\x1B[2J\x1B[1;1H");
+            ui::header_with_mode(&current_model, &current_mode);
+            continue;
+        }
+
+        if commands::handle(input, &mut current_model, &mut cfg).await? {
+            continue;
+        }
+
+        let api_url = cfg.api_url();
+
+        match mapper::map(input) {
+            mapper::Action::Execute(cmd) => {
+                ui::bot_prefix_with_mode(&current_mode);
+                let perms = current_mode.permissions();
+                let result = tools::run_command(&cmd, &perms);
+                if result.starts_with("⛔ ") {
+                    println!("{}", result);
+                    println!("\n└────────────────────────────────────────────┘\n");
+                    continue;
+                }
+                let resp = ollama::single_turn(&api_url, &current_model, input, &cmd, &result, cfg.timeout_secs).await;
+                println!("{}", resp.bright_green());
+                println!("\n└────────────────────────────────────────────┘\n");
+                continue;
+            }
+            mapper::Action::PassThrough => {}
+        }
+
+        let force_tool = input.starts_with("open ") || input.starts_with("add ") || input.starts_with("update ")
+            || input.starts_with("edit ") || input.starts_with("change ") || input.starts_with("modify ")
+            || input.starts_with("create ") || input.starts_with("write ") || input.starts_with("make ")
+            || input.starts_with("ls") || input.starts_with("cat ") || input.starts_with("echo ")
+            || input.starts_with("pwd") || input.starts_with("whoami") || input.starts_with("which ")
+            || input.starts_with("mkdir ") || input.starts_with("rm ") || input.starts_with("cp ")
+            || input.starts_with("mv ") || input.starts_with("grep ") || input.starts_with("curl ")
+            || input.starts_with("git ") || input.starts_with("cd ") || input.starts_with("chmod ")
+            || input.starts_with("npx ") || input.starts_with("npm ") || input.starts_with("cargo ")
+            || input.starts_with("docker ") || input.starts_with("ping ") || input.starts_with("wget ")
+            || input.starts_with("ps ") || input.starts_with("top ") || input.starts_with("df ")
+            || input.starts_with("du ") || input.starts_with("uname ") || input.starts_with("env ")
+            || input.starts_with("printenv ") || input.starts_with("alias ") || input.starts_with("type ")
+            || input.starts_with("id ") || input.starts_with("who ") || input.starts_with("wc ")
+            || input.starts_with("sort ") || input.starts_with("head ") || input.starts_with("tail ")
+            || input.starts_with("find ") || input.starts_with("locate ") || input.starts_with("tree ");
+        ui::bot_prefix_with_mode(&current_mode);
+        let spinner = spinner::start_spinner();
+
+        let (mut rx, _chat_handle) = ollama::chat_stream(&api_url, &current_model, input, cfg.timeout_secs, current_mode, force_tool);
+        let mut response = String::new();
+        let mut cancelled = false;
+        let mut got_token = false;
+
+        loop {
+            select! {
+                token = rx.recv() => {
+                    match token {
+                        Some(t) => {
+                            if !got_token {
+                                got_token = true;
+                                spinner.stop();
+                            }
+                            if response.is_empty() {
+                                let trimmed = t.trim_start().to_string();
+                                response.push_str(&trimmed);
+                                for c in trimmed.chars() {
+                                    print!("{}", c.to_string().bright_green());
+                                    io::stdout().flush()?;
+                                    tokio::time::sleep(std::time::Duration::from_millis(8)).await;
+                                }
+                            } else {
+                                response.push_str(&t);
+                                for c in t.chars() {
+                                    print!("{}", c.to_string().bright_green());
+                                    io::stdout().flush()?;
+                                    tokio::time::sleep(std::time::Duration::from_millis(8)).await;
+                                }
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    cancelled = true;
+                    break;
+                }
+            }
+        }
+
+        if cancelled {
+            spinner.stop();
+            println!("\r⚠️ Generation cancelled");
+            continue;
+        }
+
+        if !got_token {
+            spinner.stop();
+            println!("\r⚠️ No response from API (check /status for provider/model)");
+            continue;
+        }
+
+        if response.starts_with("❌ ") {
+            history::save(input, &response);
+            println!("\n");
+            continue;
+        }
+        history::save(input, &response);
+        println!("\n└────────────────────────────────────────────┘\n");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod user_tests {
+    use crate::{mapper, tools, mode::Mode};
+
+    #[test]
+    fn test_user_runs_echo() {
+        let input = "run echo hello";
+        match mapper::map(input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert_eq!(result, "hello");
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+    }
+
+    #[test]
+    fn test_user_adds_text_to_file() {
+        let path = "/tmp/fuchecode_user_test_add.txt";
+        let _ = std::fs::remove_file(path);
+        let input = format!("add hello world to {}", path);
+
+        match mapper::map(&input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert!(result == "✅ Done." || result.contains("hello"));
+                let content = std::fs::read_to_string(path).unwrap_or_default();
+                assert!(content.contains("hello world"));
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_user_dangerous_command_blocked() {
+        let input = "run sudo rm -rf /";
+        match mapper::map(input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert!(result.starts_with("⛔"), "dangerous command should be blocked: {}", result);
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+    }
+}
+=== src/mapper.rs ===
+#[derive(Debug, PartialEq)]
+pub enum Action {
+    Execute(String),
+    PassThrough,
+}
+
+fn esc(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+fn sed_repl(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('&', "\\&")
+        .replace('|', "\\|")
+        .replace('\'', "'\\''")
+}
+
+pub fn map(input: &str) -> Action {
+    let t = input.trim();
+    let lower = t.to_lowercase();
+    let (first, rest) = t.split_once(' ').unwrap_or((t, ""));
+    let rest = rest.trim();
+
+    match first.to_ascii_lowercase().as_str() {
+        "open" if !rest.is_empty() => {
+            Action::Execute(format!("xdg-open {}", esc(rest)))
+        }
+
+        "cat" | "read" if !rest.is_empty() => {
+            Action::Execute(format!("cat {}", esc(rest)))
+        }
+
+        "ls" | "list" => {
+            let path = if rest.is_empty() { "." } else { rest };
+            Action::Execute(format!("ls -la {}", esc(path)))
+        }
+
+        "run" if !rest.is_empty() => {
+            Action::Execute(rest.to_string())
+        }
+
+        "live-server" | "server"
+            if lower == "live-server" || lower.starts_with("live-server ") =>
+        {
+            Action::Execute("npx live-server".into())
+        }
+
+        _ if lower == "start server" => {
+            Action::Execute("npx live-server".into())
+        }
+
+        "add" => {
+            if let Some(pos) = rest.rfind(" to ") {
+                let text = rest[..pos].trim();
+                let file = rest[pos + 4..].trim();
+                if !text.is_empty() && !file.is_empty() {
+                    if file.ends_with(".html") || file.ends_with(".htm") {
+                        return Action::Execute(format!(
+                            "sed -i 's|</body>|{}\\n</body>|' {}",
+                            sed_repl(text),
+                            esc(file)
+                        ));
+                    }
+                    return Action::Execute(format!(
+                        "printf '%s\\n' {} >> {}",
+                        esc(text),
+                        esc(file)
+                    ));
+                }
+            }
+            Action::PassThrough
+        }
+
+        "search" => {
+            if rest.is_empty() {
+                return Action::PassThrough;
+            }
+            let (pat, path) = if let Some(pos) = rest.rfind(" in ") {
+                (&rest[..pos], rest[pos + 4..].trim())
+            } else {
+                (rest, ".")
+            };
+            Action::Execute(format!("grep -rn {} {}", esc(pat.trim()), esc(path)))
+        }
+
+        _ => Action::PassThrough,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_open_file() {
+        assert_eq!(map("open foo.txt"), Action::Execute("xdg-open 'foo.txt'".into()));
+    }
+
+    #[test]
+    fn test_open_empty_returns_passthrough() {
+        assert_eq!(map("open "), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_open_with_spaces() {
+        assert_eq!(
+            map("open my file.txt"),
+            Action::Execute("xdg-open 'my file.txt'".into())
+        );
+    }
+
+    #[test]
+    fn test_cat_file() {
+        assert_eq!(map("cat foo.rs"), Action::Execute("cat 'foo.rs'".into()));
+    }
+
+    #[test]
+    fn test_read_alias() {
+        assert_eq!(map("read foo.rs"), Action::Execute("cat 'foo.rs'".into()));
+    }
+
+    #[test]
+    fn test_cat_empty_returns_passthrough() {
+        assert_eq!(map("cat "), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_ls_default_path() {
+        assert_eq!(map("ls"), Action::Execute("ls -la '.'".into()));
+    }
+
+    #[test]
+    fn test_ls_with_path() {
+        assert_eq!(map("ls src"), Action::Execute("ls -la 'src'".into()));
+    }
+
+    #[test]
+    fn test_list_alias_default_path() {
+        assert_eq!(map("list"), Action::Execute("ls -la '.'".into()));
+    }
+
+    #[test]
+    fn test_list_with_path() {
+        assert_eq!(map("list src"), Action::Execute("ls -la 'src'".into()));
+    }
+
+    #[test]
+    fn test_run_command() {
+        assert_eq!(map("run echo hi"), Action::Execute("echo hi".into()));
+    }
+
+    #[test]
+    fn test_run_empty_returns_passthrough() {
+        assert_eq!(map("run "), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_live_server() {
+        assert_eq!(map("live-server"), Action::Execute("npx live-server".into()));
+    }
+
+    #[test]
+    fn test_live_server_with_args() {
+        assert_eq!(map("live-server --port=3000"), Action::Execute("npx live-server".into()));
+    }
+
+    #[test]
+    fn test_start_server_alias() {
+        assert_eq!(map("start server"), Action::Execute("npx live-server".into()));
+    }
+
+    #[test]
+    fn test_add_to_html_file() {
+        let result = map("add <p>hi</p> to index.html");
+        assert!(matches!(result, Action::Execute(ref s) if s.contains("sed -i")));
+    }
+
+    #[test]
+    fn test_add_to_txt_file() {
+        let result = map("add hello world to notes.txt");
+        assert!(matches!(result, Action::Execute(ref s) if s.contains("printf")));
+    }
+
+    #[test]
+    fn test_add_without_to_returns_passthrough() {
+        assert_eq!(map("add something"), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_add_empty_text_returns_passthrough() {
+        assert_eq!(map("add  to file.txt"), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_search_with_in() {
+        let result = map("search fn main in src/");
+        assert_eq!(result, Action::Execute("grep -rn 'fn main' 'src/'".into()));
+    }
+
+    #[test]
+    fn test_search_without_in_defaults_to_dot() {
+        let result = map("search foobar");
+        assert_eq!(result, Action::Execute("grep -rn 'foobar' '.'".into()));
+    }
+
+    #[test]
+    fn test_search_empty_returns_passthrough() {
+        assert_eq!(map("search "), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_empty_input_returns_passthrough() {
+        assert_eq!(map(""), Action::PassThrough);
+        assert_eq!(map("   "), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_unknown_command_returns_passthrough() {
+        assert_eq!(map("foobar xyz"), Action::PassThrough);
+    }
+
+    #[test]
+    fn test_case_insensitive_ls() {
+        assert_eq!(map("LS src"), Action::Execute("ls -la 'src'".into()));
+    }
+
+    #[test]
+    fn test_case_insensitive_cat() {
+        assert_eq!(map("CAT foo.txt"), Action::Execute("cat 'foo.txt'".into()));
+    }
+
+    #[test]
+    fn test_case_insensitive_live_server() {
+        assert_eq!(map("Live-Server"), Action::Execute("npx live-server".into()));
+    }
+
+    #[test]
+    fn test_open_with_apostrophe() {
+        assert_eq!(
+            map("open it's.txt"),
+            Action::Execute("xdg-open 'it'\\''s.txt'".into())
+        );
+    }
+
+    #[test]
+    fn test_search_with_apostrophe() {
+        assert_eq!(
+            map("search it's in src/"),
+            Action::Execute("grep -rn 'it'\\''s' 'src/'".into())
+        );
+    }
+
+    #[test]
+    fn test_add_with_apostrophe_in_text() {
+        let result = map("add Arjun's code to notes.txt");
+        assert!(matches!(result, Action::Execute(ref s) if s.contains("printf")));
+        assert!(matches!(result, Action::Execute(ref s) if s.contains("Arjun")));
+    }
+
+    #[test]
+    fn test_run_keeps_arguments() {
+        assert_eq!(
+            map("run npx live-server --port 8080"),
+            Action::Execute("npx live-server --port 8080".into())
+        );
+    }
+
+    #[test]
+    fn test_single_word_passthrough() {
+        assert_eq!(map("hello"), Action::PassThrough);
+    }
+}
+=== src/mode.rs ===
+use std::fmt;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Mode {
+    Build,
+    Plan,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct ToolPermission {
+    pub read: bool,
+    pub write: bool,
+    pub execute: bool,
+    pub network: bool,
+}
+
+impl Mode {
+    pub fn toggle(&self) -> Self {
+        match self {
+            Mode::Build => Mode::Plan,
+            Mode::Plan => Mode::Build,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn color(&self) -> ratatui::style::Color {
+        match self {
+            Mode::Build => ratatui::style::Color::Rgb(0, 150, 255),
+            Mode::Plan => ratatui::style::Color::Rgb(255, 165, 0),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Mode::Build => "BUILD",
+            Mode::Plan => "PLAN",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn permissions(&self) -> ToolPermission {
+        match self {
+            Mode::Build => ToolPermission { read: true, write: true, execute: true, network: true },
+            Mode::Plan => ToolPermission { read: true, write: false, execute: false, network: false },
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_toggle_build_to_plan() {
+        assert_eq!(Mode::Build.toggle(), Mode::Plan);
+    }
+
+    #[test]
+    fn test_toggle_plan_to_build() {
+        assert_eq!(Mode::Plan.toggle(), Mode::Build);
+    }
+
+    #[test]
+    fn test_toggle_twice_returns_original() {
+        assert_eq!(Mode::Build.toggle().toggle(), Mode::Build);
+        assert_eq!(Mode::Plan.toggle().toggle(), Mode::Plan);
+    }
+
+    #[test]
+    fn test_name() {
+        assert_eq!(Mode::Build.name(), "BUILD");
+        assert_eq!(Mode::Plan.name(), "PLAN");
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(format!("{}", Mode::Build), "BUILD");
+        assert_eq!(format!("{}", Mode::Plan), "PLAN");
+    }
+
+    #[test]
+    fn test_partial_eq() {
+        assert_eq!(Mode::Build, Mode::Build);
+        assert_ne!(Mode::Build, Mode::Plan);
+    }
+
+    #[test]
+    fn test_build_permissions() {
+        let p = Mode::Build.permissions();
+        assert!(p.read);
+        assert!(p.write);
+        assert!(p.execute);
+        assert!(p.network);
+    }
+
+    #[test]
+    fn test_plan_permissions() {
+        let p = Mode::Plan.permissions();
+        assert!(p.read);
+        assert!(!p.write);
+        assert!(!p.execute);
+        assert!(!p.network);
+    }
+}
+=== src/ollama.rs ===
+use futures_util::StreamExt;
+use reqwest;
+use serde_json::{json, Value};
+use std::io::Write;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+use crate::mode::Mode;
+
+fn make_client(timeout_secs: u64) -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+pub async fn check_cr_status() -> bool {
+    let client = make_client(2);
+    client.get("http://127.0.0.1:8402/v1/models")
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+pub async fn list_models(api_url: &str, timeout_secs: u64) -> Result<Vec<String>, reqwest::Error> {
+    let base_url = if api_url.contains("8402") || api_url.contains("blockrun") {
+        let pos = api_url.find("/v1/").unwrap_or(api_url.len());
+        format!("{}/v1/models", &api_url[..pos])
+    } else if api_url.contains("integrate.api.nvidia.com") {
+        let pos = api_url.find("/v1/").unwrap_or(api_url.len());
+        format!("{}/v1/models", &api_url[..pos])
+    } else {
+        let pos = api_url.find("/api/").unwrap_or(api_url.len());
+        format!("{}/api/tags", &api_url[..pos])
+    };
+
+    let client = make_client(timeout_secs);
+    let resp = client.get(&base_url).send().await?;
+    let json: Value = resp.json().await?;
+
+    let models = if base_url.contains("/api/tags") {
+        json["models"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        json["data"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    Ok(models)
+}
+
+pub async fn single_turn(
+    api_url: &str,
+    model: &str,
+    prompt: &str,
+    _executed_cmd: &str,
+    tool_result: &str,
+    timeout_secs: u64,
+) -> String {
+    use std::time::Instant;
+    let start = Instant::now();
+    let client = make_client(timeout_secs);
+    let is_ollama_api = api_url.contains("/api/chat");
+
+    let system = format!("The command has been executed with this result:\n{}\nBriefly summarize what happened in 1 sentence. Do not show the result again.", tool_result);
+    let messages = vec![
+        json!({"role": "system", "content": system}),
+        json!({"role": "user", "content": prompt}),
+    ];
+
+    let body = json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+    });
+
+    let mut req = client.post(api_url).json(&body);
+    if api_url.contains("integrate.api.nvidia.com") {
+        let key = std::env::var("NVIDIA_API_KEY").unwrap_or_default();
+        if !key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", key));
+        }
+    }
+
+    match req.send().await {
+        Ok(resp) => {
+            if !resp.status().is_success() {
+                return format!("❌ API error: {}", resp.status());
+            }
+            let json: Value = resp.json().await.unwrap_or_default();
+            let text = if is_ollama_api {
+                json["message"]["content"].as_str().unwrap_or("")
+            } else {
+                json["choices"][0]["message"]["content"].as_str().unwrap_or("")
+            };
+            let elapsed = start.elapsed().as_millis();
+            format!("💭 {}ms — {}\n{}", elapsed, model, text.trim())
+        }
+        Err(e) => format!("❌ Connection failed: {}", e),
+    }
+}
+
+const SYSTEM_PROMPT: &str = "You MUST use the run_command tool for ANY terminal command, file operation, web request, or system task. NEVER generate fake command output yourself — always call the tool. After the tool returns, briefly summarize the result. For editing files use `sed -i` to edit in place. For opening files use `xdg-open <file>`. NEVER install packages or start servers unless the user explicitly asks. NEVER fake a result — always call the tool. When the user asks to update/create/edit/modify a file, you MUST call run_command to write the file. NEVER just show the new content in your response — write it to the file. Answer within 5 lines in simple layman terms. No jargon.";
+
+fn tool_defs() -> Value {
+    json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "run_command",
+                "description": "Execute any shell command. Use this for creating/editing/deleting files, searching the web, git operations, opening browsers, installing packages, or any system task.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "Shell command to execute"}
+                    },
+                    "required": ["command"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "apply_patch",
+                "description": "Apply surgical edits to a file. Prefer this over run_command with sed/cat for targeted changes. Each operation is applied in order on the same file. If any hunk fails the patch stops with an error message — the model can then retry with corrected hunks.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "description": "Path to the file to patch"},
+                        "operations": {
+                            "type": "array",
+                            "description": "Ordered list of edit operations to apply",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "op": {
+                                        "type": "string",
+                                        "enum": ["search_replace", "delete", "insert_after", "insert_before"],
+                                        "description": "search_replace: find 'old' and replace with 'new'. delete: remove 'old'. insert_after: place 'new' after 'old'. insert_before: place 'new' before 'old'."
+                                    },
+                                    "old": {"type": "string", "description": "Text to find (must exist in file)"},
+                                    "new": {"type": "string", "description": "Replacement or insertion text"}
+                                },
+                                "required": ["op", "old"]
+                            }
+                        }
+                    },
+                    "required": ["file", "operations"]
+                }
+            }
+        }
+    ])
+}
+
+pub fn chat_stream(
+    api_url: &str,
+    model: &str,
+    prompt: &str,
+    timeout_secs: u64,
+    mode: Mode,
+    force_tool: bool,
+) -> (mpsc::Receiver<String>, JoinHandle<()>) {
+    let (tx, rx) = mpsc::channel::<String>(256);
+    let url = api_url.to_string();
+    let model = model.to_string();
+    let prompt = prompt.to_string();
+
+    let handle = tokio::spawn(async move {
+        async fn fail(tx: &mpsc::Sender<String>, msg: &str) {
+            let _ = tx.send(msg.to_string()).await;
+            let _ = writeln!(std::io::stderr(), "{}", msg);
+        }
+
+        let perms = mode.permissions();
+        let start = std::time::Instant::now();
+        let client = make_client(timeout_secs);
+        let is_nvidia = url.contains("integrate.api.nvidia.com");
+        let is_clawrouter = url.contains("8402") || url.contains("blockrun");
+        let is_ollama = !is_nvidia && !is_clawrouter;
+        let mut actual_model = String::new();
+
+        let mut messages: Vec<Value> = vec![
+            json!({"role": "system", "content": SYSTEM_PROMPT}),
+            json!({"role": "user", "content": prompt}),
+        ];
+
+        let tools = tool_defs();
+
+        loop {
+            let mut body = json!({
+                "model": model,
+                "messages": messages,
+                "stream": true
+            });
+
+            if !is_ollama {
+                body["tools"] = tools.clone();
+                if force_tool {
+                    body["tool_choice"] = json!("required");
+                }
+            }
+
+            let mut req = client.post(&url).json(&body);
+
+            if is_nvidia {
+                let key = std::env::var("NVIDIA_API_KEY").unwrap_or_default();
+                if key.is_empty() {
+                    let _ = writeln!(std::io::stderr(), "❌ NVIDIA_API_KEY not set in environment");
+                }
+                req = req.header("Authorization", format!("Bearer {}", key));
+            }
+
+            let mut tool_calls: Vec<(usize, String, String, String)> = Vec::new();
+            let mut text_content = String::new();
+
+            let response_ok = match req.send().await {
+                Ok(response) => {
+                    let status = response.status();
+                    if !status.is_success() {
+                        let body_text = response.text().await.unwrap_or_default();
+                        let err = format!("❌ API error {}: {}", status, body_text);
+                        fail(&tx, &err).await;
+                        false
+                    } else {
+                        let mut stream = response.bytes_stream();
+                        let mut buf = String::new();
+                        let mut got_content = false;
+
+                        while let Some(chunk_result) = stream.next().await {
+                            match chunk_result {
+                                Ok(chunk) => {
+                                    let chunk_str = String::from_utf8_lossy(&chunk);
+                                    buf.push_str(&chunk_str);
+
+                                    while let Some(nl) = buf.find('\n') {
+                                        let line = buf[..nl].trim().to_string();
+                                        buf = buf[nl + 1..].to_string();
+
+                                        if line.is_empty() || line.starts_with(':') || line == "data: [DONE]" {
+                                            continue;
+                                        }
+
+                                        if is_ollama {
+                                            match serde_json::from_str::<Value>(&line) {
+                                                Ok(v) => {
+                                                    if let Some(text) = v["message"]["content"].as_str() {
+                                                        got_content = true;
+                                                        text_content.push_str(text);
+                                                        let _ = tx.send(text.to_string()).await;
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    let _ = writeln!(std::io::stderr(), "⚠️ Parse warning: {} — line: {}", e, &line[..line.len().min(80)]);
+                                                }
+                                            }
+                                        } else {
+                                            let json_str = line.strip_prefix("data: ").unwrap_or(&line);
+                                            match serde_json::from_str::<Value>(json_str) {
+                                                Ok(v) => {
+                                                    if actual_model.is_empty() {
+                                                        if let Some(m) = v["model"].as_str() {
+                                                            actual_model = m.to_string();
+                                                        }
+                                                    }
+                                                    if let Some(err_msg) = v["error"].as_str() {
+                                                        let err = format!("❌ API error: {}", err_msg);
+                                                        fail(&tx, &err).await;
+                                                        got_content = true;
+                                                    } else if let Some(err_obj) = v["error"].as_object() {
+                                                        let msg = err_obj.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
+                                                        let err = format!("❌ API error: {}", msg);
+                                                        fail(&tx, &err).await;
+                                                        got_content = true;
+                                                    }
+                                                    let delta = &v["choices"][0]["delta"];
+
+                                                    if let Some(tcs) = delta["tool_calls"].as_array() {
+                                                        for tc in tcs {
+                                                            let idx = tc["index"].as_i64().unwrap_or(0) as usize;
+                                                            let id = tc["id"].as_str().unwrap_or("").to_string();
+                                                            let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+                                                            let args = tc["function"]["arguments"].as_str().unwrap_or("").to_string();
+
+                                                            if tool_calls.iter().any(|(i, _, _, _)| *i == idx) {
+                                                                if let Some(entry) = tool_calls.iter_mut().find(|(i, _, _, _)| *i == idx) {
+                                                                    if !id.is_empty() { entry.1 = id; }
+                                                                    if !name.is_empty() { entry.2 = name; }
+                                                                    entry.3.push_str(&args);
+                                                                }
+                                                            } else {
+                                                                tool_calls.push((idx, id, name, args));
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if let Some(text) = delta["content"].as_str() {
+                                                        got_content = true;
+                                                        text_content.push_str(text);
+                                                        if !text.contains("⚠️ Wallet empty") {
+                                                            let _ = tx.send(text.to_string()).await;
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    let _ = writeln!(std::io::stderr(), "⚠️ JSON parse error: {} — line: {}", e, json_str.chars().take(80).collect::<String>());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    let err = format!("❌ Stream error: {}", e);
+                                    fail(&tx, &err).await;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if !got_content && !is_ollama {
+                            if let Ok(v) = serde_json::from_str::<Value>(&buf) {
+                                let err_msg = v["error"].as_str()
+                                    .or_else(|| v["error"].as_object()
+                                        .and_then(|o| o.get("message"))
+                                        .and_then(|m| m.as_str()))
+                                    .unwrap_or("");
+                                if !err_msg.is_empty() {
+                                    let err = format!("❌ API error: {}", err_msg);
+                                    fail(&tx, &err).await;
+                                }
+                            }
+                        }
+
+                        true
+                    }
+                }
+                Err(e) => {
+                    let err = format!("❌ Connection failed: {}", e);
+                    fail(&tx, &err).await;
+                    false
+                }
+            };
+
+            if !response_ok {
+                break;
+            }
+
+            let tool_calls: Vec<(String, String, String)> = tool_calls
+                .into_iter()
+                .filter(|(_, id, _, _)| !id.is_empty())
+                .map(|(_, id, name, args)| (id, name, args))
+                .collect();
+
+            if tool_calls.is_empty() {
+                break;
+            }
+
+            let mut tcs: Vec<Value> = Vec::new();
+            for (id, name, args) in &tool_calls {
+                tcs.push(json!({
+                    "id": id,
+                    "type": "function",
+                    "function": { "name": name, "arguments": args }
+                }));
+            }
+            let mut assistant_msg = json!({"role": "assistant", "content": text_content});
+            assistant_msg["tool_calls"] = json!(tcs);
+            messages.push(assistant_msg);
+
+            for (id, name, args_json) in &tool_calls {
+                let result = match name.as_str() {
+                    "run_command" => {
+                        let cmd = serde_json::from_str::<Value>(args_json)
+                            .ok()
+                            .and_then(|v| v["command"].as_str().map(|s| s.to_string()))
+                            .unwrap_or_default();
+                        crate::tools::run_command(&cmd, &perms)
+                    }
+                    "apply_patch" => {
+                        let args: Value = serde_json::from_str(args_json).unwrap_or_default();
+                        let file = args["file"].as_str().unwrap_or("").to_string();
+                        let ops = args["operations"].as_array().cloned().unwrap_or_default();
+                        crate::tools::apply_patch(&file, &ops, &perms)
+                    }
+                    _ => format!("❌ Unknown tool: {}", name),
+                };
+                messages.push(json!({
+                    "role": "tool",
+                    "tool_call_id": id,
+                    "content": result
+                }));
+            }
+        }
+
+        let elapsed = start.elapsed().as_millis();
+        if actual_model.is_empty() {
+            print!("\r\x1B[2K\r💭 {}ms", elapsed);
+        } else {
+            print!("\r\x1B[2K\r💭 {}ms — {}", elapsed, actual_model);
+        }
+        let _ = std::io::stdout().flush();
+    });
+
+    (rx, handle)
+}
+=== src/popup.rs ===
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, DisableLineWrap};
+use crossterm::ExecutableCommand;
+use std::io::{self, Write};
+use colored::*;
+
+struct RawGuard;
+
+impl RawGuard {
+    fn enter() -> Self {
+        let _ = enable_raw_mode();
+        RawGuard
+    }
+}
+
+impl Drop for RawGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
+}
+
+const ITEMS: &[(&str, &str)] = &[
+    ("/help", "Show available commands"),
+    ("/mode", "Toggle Build/Plan mode"),
+    ("/model", "Show current model"),
+    ("/model <name>", "Switch model"),
+    ("/models", "List & select from provider models"),
+    ("/provider", "Switch provider (ollama/nvidia/clawrouter)"),
+    ("/providers", "List available providers"),
+    ("/history", "Show last 10 messages"),
+    ("/clear", "Clear conversation history"),
+    ("/cd <path>", "Change working directory"),
+    ("/status", "Show system status"),
+    ("/save", "Export conversation to file"),
+    ("/exit", "Quit fuchecode"),
+];
+
+fn draw(selected: usize) {
+    let _ = io::stdout().execute(DisableLineWrap);
+    let mut out = String::new();
+    out.push_str("\r\n");
+    out.push_str(&format!("{}\n", "┌─ Commands ─────────────────────────────────┐".cyan()));
+    for (i, (cmd, desc)) in ITEMS.iter().enumerate() {
+        let line = if i == selected {
+            format!("│ {} {:<10} {}  │\n", "▸".bright_yellow(), cmd.bright_white().bold(), desc.dimmed())
+        } else {
+            format!("│   {:<10} {}  │\n", cmd.bright_green(), desc.dimmed())
+        };
+        out.push_str(&line);
+    }
+    out.push_str(&format!("{}", "└────────────────────────────────────────────┘".cyan()));
+    out.push_str("\r\n");
+    out.push_str(&format!("\r{}", "  ↑↓ navigate · Enter select · Esc close".dimmed()));
+    out.push_str(" \r");
+    print!("{}", out);
+    let _ = io::stdout().flush();
+}
+
+fn clear_popup() {
+    // Clear the popup area by moving up and clearing lines
+    let height = ITEMS.len() as u16 + 4;
+    for _ in 0..height {
+        print!("\x1B[2K\r\x1B[1A");
+    }
+    print!("\r");
+    let _ = io::stdout().flush();
+}
+
+pub fn show() -> String {
+    let _guard = RawGuard::enter();
+    let mut selected = 0usize;
+
+    draw(selected);
+
+    loop {
+        match event::read() {
+            Ok(Event::Key(ke)) if ke.kind == KeyEventKind::Press => {
+                match ke.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if selected > 0 {
+                            selected -= 1;
+                        }
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if selected + 1 < ITEMS.len() {
+                            selected += 1;
+                        }
+                    }
+                    KeyCode::Enter => {
+                        clear_popup();
+                        return ITEMS[selected].0.to_string();
+                    }
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        clear_popup();
+                        return String::new();
+                    }
+                    _ => {}
+                }
+                draw(selected);
+            }
+            Ok(Event::Resize(_, _)) => {
+                draw(selected);
+            }
+            _ => {}
+        }
+    }
+}
+=== src/spinner.rs ===
+use std::io::Write;
+use std::sync::OnceLock;
+use tokio::sync::watch;
+use tokio::time::{sleep, Duration};
+
+const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+pub struct SpinnerHandle {
+    stop_tx: watch::Sender<bool>,
+}
+
+pub fn start_spinner() -> SpinnerHandle {
+    let (stop_tx, mut stop_rx) = watch::channel(false);
+    let global_tx = stop_tx.clone();
+    let _ = STOP_SENDER.set(global_tx);
+
+    tokio::spawn(async move {
+        let mut i = 0usize;
+        loop {
+            tokio::select! {
+                _ = stop_rx.changed() => break,
+                _ = sleep(Duration::from_millis(80)) => {
+                    eprint!("\r{} ", FRAMES[i % FRAMES.len()]);
+                    let _ = std::io::stderr().flush();
+                    i += 1;
+                }
+            }
+        }
+    });
+
+    SpinnerHandle { stop_tx }
+}
+
+pub static STOP_SENDER: OnceLock<watch::Sender<bool>> = OnceLock::new();
+
+pub fn stop_global() {
+    if let Some(tx) = STOP_SENDER.get() {
+        let _ = tx.send(true);
+    }
+    eprint!("\r\x1B[2K\r");
+    let _ = std::io::stderr().flush();
+}
+
+impl SpinnerHandle {
+    pub fn stop(&self) {
+        let _ = self.stop_tx.send(true);
+        eprint!("\r\x1B[2K\r");
+        let _ = std::io::stderr().flush();
+    }
+}
+=== src/tools.rs ===
+#![allow(dead_code)]
+
+use std::fs;
+use std::io::{self, Write};
+use std::sync::OnceLock;
+use crate::mode::ToolPermission;
+
+fn is_wsl() -> bool {
+    static WSL: OnceLock<bool> = OnceLock::new();
+    *WSL.get_or_init(|| {
+        std::env::var("WSL_DISTRO_NAME").is_ok()
+            || fs::read_to_string("/proc/version")
+                .map(|s| s.to_lowercase().contains("microsoft"))
+                .unwrap_or(false)
+    })
+}
+
+fn adapt_command(cmd: &str) -> String {
+    let trimmed = cmd.trim();
+    if trimmed.starts_with("xdg-open ") || trimmed.starts_with("open ") {
+        let raw = trimmed
+            .strip_prefix("xdg-open ")
+            .or_else(|| trimmed.strip_prefix("open "))
+            .unwrap_or("")
+            .trim();
+        if !raw.is_empty() {
+            let bare = if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() > 1 {
+                &raw[1..raw.len()-1]
+            } else {
+                raw
+            };
+            if is_wsl() {
+                return format!("cmd.exe /c start \"\" \"$(wslpath -w '{}')\"", bare.replace('\'', "'\\''"));
+            }
+            if cfg!(target_os = "windows") {
+                return format!("start \"\" \"{}\"", bare);
+            }
+        }
+    }
+    cmd.to_string()
+}
+
+pub fn read_file(path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    print!("\r📖 {}... ", path);
+    let _ = io::stdout().flush();
+    fs::read_to_string(path).unwrap_or_else(|_| "Not found".to_string())
+}
+
+pub fn list_dir(path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    let path = if path.is_empty() { "." } else { path };
+    print!("\r📁 {}... ", path);
+    let _ = io::stdout().flush();
+    
+    match fs::read_dir(path) {
+        Ok(entries) => {
+            let mut dirs = Vec::new();
+            let mut files = Vec::new();
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if entry.path().is_dir() {
+                    dirs.push(format!("  📁 {}", name));
+                } else {
+                    files.push(format!("  📄 {}", name));
+                }
+            }
+            dirs.sort(); files.sort();
+            let mut output = vec!["📂 Current Directory:".to_string()];
+            if !dirs.is_empty() { output.push("".to_string()); output.push("Directories:".to_string()); output.extend(dirs); }
+            if !files.is_empty() { output.push("".to_string()); output.push("Files:".to_string()); output.extend(files); }
+            output.join("\n")
+        }
+        Err(e) => format!("Error: {}", e),
+    }
+}
+
+pub fn search_content(pattern: &str, path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    let path = if path.is_empty() { "." } else { path };
+    print!("\r🔍 '{}' in {}... ", pattern, path);
+    let _ = io::stdout().flush();
+    
+    let mut results = Vec::new();
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file()
+                && let Ok(content) = fs::read_to_string(&p)
+                && content.contains(pattern)
+                && let Some(name) = p.file_name()
+            {
+                results.push(name.to_string_lossy().to_string());
+            }
+        }
+    }
+    if results.is_empty() { "No matches".to_string() } 
+    else { format!("Found in: {}", results.join(", ")) }
+}
+
+pub fn write_file(path: &str, content: &str, perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    match std::fs::write(path, content) {
+        Ok(_) => format!("✅ Written to: {}", path),
+        Err(e) => format!("❌ Error: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn build_perms() -> ToolPermission {
+        ToolPermission { read: true, write: true, execute: true, network: true }
+    }
+
+    fn plan_perms() -> ToolPermission {
+        ToolPermission { read: true, write: false, execute: false, network: false }
+    }
+
+    #[test]
+    fn test_read_file_not_found() {
+        let result = read_file("/tmp/nonexistent_file_12345.txt", &build_perms());
+        assert_eq!(result, "Not found");
+    }
+
+    #[test]
+    fn test_read_file_empty() {
+        let path = "/tmp/fuchecode_test_empty.txt";
+        fs::write(path, "").unwrap();
+        let result = read_file(path, &build_perms());
+        assert_eq!(result, "");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_read_file_with_content() {
+        let path = "/tmp/fuchecode_test_content.txt";
+        fs::write(path, "hello world").unwrap();
+        let result = read_file(path, &build_perms());
+        assert_eq!(result, "hello world");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_list_dir_empty_path() {
+        let result = list_dir("", &build_perms());
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_list_dir_nonexistent() {
+        let result = list_dir("/tmp/fuchecode_nonexistent_dir_xyz", &build_perms());
+        assert!(result.starts_with("Error:"));
+    }
+
+    #[test]
+    fn test_list_dir_with_files() {
+        let dir = "/tmp/fuchecode_test_listdir";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/a.txt"), "a").unwrap();
+        let result = list_dir(dir, &build_perms());
+        assert!(result.contains("a.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_search_content_no_match() {
+        let result = search_content("zzz_xyz_nonexistent", "/tmp", &build_perms());
+        assert_eq!(result, "No matches");
+    }
+
+    #[test]
+    fn test_search_content_finds_match() {
+        let dir = "/tmp/fuchecode_test_search";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/findme.txt"), "secret_keyword_42").unwrap();
+        let result = search_content("secret_keyword_42", dir, &build_perms());
+        assert!(result.contains("findme.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_search_content_empty_pattern() {
+        let dir = "/tmp/fuchecode_test_search_empty";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/any.txt"), "data").unwrap();
+        let result = search_content("", dir, &build_perms());
+        assert!(result.contains("any.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_write_file_success() {
+        let path = "/tmp/fuchecode_test_write.txt";
+        let result = write_file(path, "test content", &build_perms());
+        assert!(result.contains("✅ Written to"));
+
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content, "test content");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_write_file_invalid_path() {
+        let result = write_file("/dev/null/fuchecode_test", "data", &build_perms());
+        assert!(result.starts_with("❌ Error:"));
+    }
+
+    #[test]
+    fn test_list_dir_special_chars_in_name() {
+        let dir = "/tmp/fuchecode_test_special";
+        let _ = fs::create_dir_all(dir);
+        let file_path = format!("{dir}/file with spaces!@#.txt");
+        fs::write(&file_path, "data").unwrap();
+        let result = list_dir(dir, &build_perms());
+        assert!(result.contains("file with spaces!@#.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_write_denied_in_plan_mode() {
+        let result = write_file("/tmp/fuchecode_denied.txt", "data", &plan_perms());
+        assert!(result.contains("⛔"));
+        assert!(result.contains("denied"));
+    }
+
+    #[test]
+    fn test_read_allowed_in_plan_mode() {
+        let path = "/tmp/fuchecode_plan_read.txt";
+        fs::write(path, "visible").unwrap();
+        let result = read_file(path, &plan_perms());
+        assert_eq!(result, "visible");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_edit_file_replaces_text() {
+        let path = "/tmp/fuchecode_edit_test.txt";
+        fs::write(path, "hello world foo").unwrap();
+        let result = edit_file(path, "foo", "bar", &build_perms());
+        assert!(result.contains("✅ Edited"));
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content, "hello world bar");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_edit_file_pattern_not_found() {
+        let path = "/tmp/fuchecode_edit_notfound.txt";
+        fs::write(path, "hello").unwrap();
+        let result = edit_file(path, "nonexistent", "bar", &build_perms());
+        assert!(result.contains("❌ Pattern not found"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_edit_file_denied_in_plan() {
+        let result = edit_file("/tmp/any.txt", "a", "b", &plan_perms());
+        assert!(result.contains("⛔"));
+    }
+
+    #[test]
+    fn test_delete_file_success() {
+        let path = "/tmp/fuchecode_delete_test.txt";
+        fs::write(path, "data").unwrap();
+        let result = delete_file(path, &build_perms());
+        assert!(result.contains("✅ Deleted"));
+        assert!(!std::path::Path::new(path).exists());
+    }
+
+    #[test]
+    fn test_delete_file_not_found() {
+        let result = delete_file("/tmp/fuchecode_nonexistent_xyz.txt", &build_perms());
+        assert!(result.contains("❌"));
+    }
+
+    #[test]
+    fn test_delete_file_denied_in_plan() {
+        let result = delete_file("/tmp/any.txt", &plan_perms());
+        assert!(result.contains("⛔"));
+    }
+
+    #[test]
+    fn test_apply_patch_search_replace() {
+        let path = "/tmp/fuchecode_patch_sr.txt";
+        fs::write(path, "hello foo world").unwrap();
+        let ops = vec![serde_json::json!({"op": "search_replace", "old": "foo", "new": "bar"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "hello bar world");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_multi_hunk() {
+        let path = "/tmp/fuchecode_patch_multi.txt";
+        fs::write(path, "a\nb\nc\n").unwrap();
+        let ops = vec![
+            serde_json::json!({"op": "search_replace", "old": "a", "new": "x"}),
+            serde_json::json!({"op": "search_replace", "old": "c", "new": "z"}),
+        ];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("2 hunks"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "x\nb\nz\n");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_delete() {
+        let path = "/tmp/fuchecode_patch_del.txt";
+        fs::write(path, "keep1\ndelete_me\nkeep2").unwrap();
+        let ops = vec![serde_json::json!({"op": "delete", "old": "delete_me\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "keep1\nkeep2");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_insert_after() {
+        let path = "/tmp/fuchecode_patch_after.txt";
+        fs::write(path, "<body>\n</html>").unwrap();
+        let ops = vec![serde_json::json!({"op": "insert_after", "old": "<body>", "new": "  <main>hi</main>\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "<body>  <main>hi</main>\n\n</html>");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_insert_before() {
+        let path = "/tmp/fuchecode_patch_before.txt";
+        fs::write(path, "</body>\n</html>").unwrap();
+        let ops = vec![serde_json::json!({"op": "insert_before", "old": "</body>", "new": "  <footer>\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "  <footer>\n</body>\n</html>");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_hunk_failure() {
+        let path = "/tmp/fuchecode_patch_fail.txt";
+        fs::write(path, "hello world").unwrap();
+        let ops = vec![serde_json::json!({"op": "search_replace", "old": "nonexistent", "new": "bar"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("❌"), "result: {}", result);
+        assert!(result.contains("Hunk 1/1"));
+        assert!(result.contains("pattern not found"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_empty_file_denied() {
+        let result = apply_patch("", &[], &build_perms());
+        assert!(result.contains("❌"));
+        assert!(result.contains("No file specified"));
+    }
+
+    #[test]
+    fn test_apply_patch_denied_in_plan() {
+        let result = apply_patch("/tmp/any.txt", &[], &plan_perms());
+        assert!(result.contains("⛔"));
+    }
+}
+
+pub fn edit_file(path: &str, old: &str, new: &str, perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            if !content.contains(old) {
+                return format!("❌ Pattern not found in: {}", path);
+            }
+            let replaced = content.replace(old, new);
+            match fs::write(path, &replaced) {
+                Ok(_) => format!("✅ Edited: {}", path),
+                Err(e) => format!("❌ Error writing: {}", e),
+            }
+        }
+        Err(e) => format!("❌ Error reading: {}", e),
+    }
+}
+
+pub fn apply_patch(file: &str, operations: &[serde_json::Value], perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    if file.is_empty() {
+        return "❌ No file specified".to_string();
+    }
+    let mut content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(e) => return format!("❌ Error reading {}: {}", file, e),
+    };
+    let total = operations.len();
+    for (i, op) in operations.iter().enumerate() {
+        let kind = op["op"].as_str().unwrap_or("");
+        let old = op["old"].as_str().unwrap_or("");
+        let new = op["new"].as_str().unwrap_or("");
+        match kind {
+            "search_replace" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty search pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: pattern not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, new, 1);
+            }
+            "delete" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty search pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: pattern not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, "", 1);
+            }
+            "insert_after" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty anchor pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: anchor not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, &format!("{}{}", old, new), 1);
+            }
+            "insert_before" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty anchor pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: anchor not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, &format!("{}{}", new, old), 1);
+            }
+            _ => return format!("❌ Hunk {}/{}: unknown op '{}'", i + 1, total, kind),
+        }
+    }
+    match fs::write(file, &content) {
+        Ok(_) => format!("✅ Patched {} ({} hunk{})", file, total, if total == 1 { "" } else { "s" }),
+        Err(e) => format!("❌ Error writing {}: {}", file, e),
+    }
+}
+
+pub fn delete_file(path: &str, perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    match fs::remove_file(path) {
+        Ok(_) => format!("✅ Deleted: {}", path),
+        Err(e) => format!("❌ Error: {}", e),
+    }
+}
+
+fn is_dangerous(command: &str) -> Option<&'static str> {
+    let lower = command.to_lowercase();
+    let patterns: &[(&str, &str)] = &[
+        ("sudo ", "Use of sudo is blocked — run dangerous commands in your terminal directly"),
+        ("npm install -g", "Global npm install is blocked"),
+        ("npm i -g", "Global npm install is blocked"),
+        ("chmod +x", "chmod +x is blocked"),
+        ("chmod 777", "chmod 777 is blocked"),
+        ("chmod 4755", "SUID bit changes are blocked"),
+        ("| bash", "Piping to shell is blocked"),
+        ("| sh", "Piping to shell is blocked"),
+        ("| zsh", "Piping to shell is blocked"),
+        ("| fish", "Piping to shell is blocked"),
+        ("mkfs", "Filesystem creation is blocked"),
+        ("dd if=", "Raw disk writes are blocked"),
+        ("> /dev/sda", "Disk device writes are blocked"),
+        ("> /dev/nvme", "Disk device writes are blocked"),
+        (":(){ :|:& };:", "Fork bombs are blocked"),
+        ("wget -O -", "Piping web content to shell is blocked"),
+    ];
+    for (pat, msg) in patterns {
+        if lower.contains(pat) {
+            return Some(msg);
+        }
+    }
+    None
+}
+
+pub fn run_command(command: &str, perms: &ToolPermission) -> String {
+    if !perms.execute {
+        return "⛔ Execute denied in current mode".to_string();
+    }
+    if command.trim().is_empty() {
+        return "⛔ Error: empty command. Call run_command with a real command.".to_string();
+    }
+    let command = adapt_command(command);
+    if let Some(reason) = is_dangerous(&command) {
+        return format!("⛔ Blocked: {}", reason);
+    }
+    crate::spinner::stop_global();
+    let display = if command.len() > 120 {
+        format!("{}...", &command[..117])
+    } else {
+        command.clone()
+    };
+    print!("\x1B[2K\r⚡ {}\n", display);
+    let _ = std::io::stdout().flush();
+    match std::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+    {
+        Ok(output) => {
+            let out = String::from_utf8_lossy(&output.stdout);
+            let err = String::from_utf8_lossy(&output.stderr);
+            if output.status.success() {
+                let trimmed = out.trim().to_string();
+                if trimmed.is_empty() { "✅ Done.".to_string() } else { trimmed }
+            } else {
+                let code = output.status.code().unwrap_or(-1);
+                let msg = err.trim();
+                if msg.is_empty() { format!("Exit {}", code) } else { format!("Exit {}: {}", code, msg) }
+            }
+        }
+        Err(e) => format!("❌ Error: {}", e),
+    }
+}
+=== src/ui.rs ===
+use colored::*;
+use std::io::Write;
+use crate::mode::Mode;
+
+pub fn header(model: &str) {
+    header_with_mode(model, &Mode::Build);
+}
+
+pub fn header_with_mode(model: &str, mode: &Mode) {
+    let mode_tag = format!("{} {}", match mode { Mode::Build => "🔵", Mode::Plan => "🟠" }, mode.name());
+    print!("\r{}\n", "╔════════════════════════════════════════════╗".cyan());
+    print!("\r{}\n", "║  ███████╗██╗   ██╗ ██████╗██╗  ██╗███████╗    ║".cyan());
+    print!("\r{}\n", "║  ██╔════╝██║   ██║██╔════╝██║  ██║██╔════╝    ║".cyan());
+    print!("\r{}\n", "║  █████╗  ██║   ██║██║     ███████║█████╗      ║".cyan());
+    print!("\r{}\n", "║  ██╔══╝  ██║   ██║██║     ██╔══██║██╔══╝      ║".cyan());
+    print!("\r{}\n", "║  ██║     ╚██████╔╝╚██████╗██║  ██║███████╗    ║".cyan());
+    print!("\r{}\n", "║  ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝    ║".cyan());
+    print!("\r{}\n", "╠════════════════════════════════════════════╣".cyan());
+    print!("\r║  {} {}  {:>12}  ║\n", "🔥 FUCHECODE".bright_red().bold(), "v1.0".yellow(), mode_tag.cyan());
+    print!("\r║  {} {}  ║\n", "🤖 Model:".green(), model.cyan());
+    print!("\r{}\n", "╚════════════════════════════════════════════╝".cyan());
+    print!("\r\n");
+    std::io::stdout().flush().ok();
+}
+
+pub fn show_guide(provider: &str, cr_online: bool) {
+    let cr_status = if cr_online { "🟢 active".bright_green() } else { "🔴 offline".bright_red() };
+
+    print!("\r{}\n", "┌─ Quick Guide ─────────────────────────────────┐".cyan());
+    print!("\r│                                                 │\n");
+    print!("\r│  {} Provider: {} ({})                    │\n", "📡".bright_green(), provider.cyan(), cr_status);
+    print!("\r│  {} Switch:    /provider clawrouter / nvidia / ollama │\n", "🔄".bright_green());
+    print!("\r│  {} Model:     /model auto                           │\n", "🤖".bright_green());
+
+    if provider == "clawrouter" {
+        print!("\r│  {} Run CR:    npx @blockrun/clawrouter@latest       │\n", "🚀".bright_green());
+        if cr_online {
+            print!("\r│  {}           🟢 Connected at :8402                   │\n", "   ".bright_green());
+        } else {
+            print!("\r│  {}           🔴 NOT RUNNING — start in another term │\n", "   ".bright_red());
+        }
+    } else {
+        print!("\r│  {} (not ClawRouter — no health check)             │\n", "   ".dimmed());
+    }
+    print!("\r│                                                 │\n");
+    print!("\r│  {} ─── Quick Start ───                             │\n", "📐".bright_yellow());
+    print!("\r│  {} 1. /provider clawrouter                          │\n", "   ".cyan());
+    print!("\r│  {} 2. /model auto                                   │\n", "   ".cyan());
+    print!("\r│  {} 3. ask: create hello.html                        │\n", "   ".cyan());
+    print!("\r│  {} 4. /mode    (toggle Build/Plan)                  │\n", "   ".cyan());
+    print!("\r│  {} 5. /help    (all commands)                       │\n", "   ".cyan());
+    print!("\r│                                                 │\n");
+    print!("\r│  {} tab  — toggle mode    {} /  — palette    {} Ctrl+C — cancel │\n", "⌨️".dimmed(), "⌨️".dimmed(), "⌨️".dimmed());
+    print!("\r{}\n", "└────────────────────────────────────────────────┘".cyan());
+    print!("\r\n");
+    std::io::stdout().flush().ok();
+}
+
+pub fn user_prompt_with_mode(mode: &Mode) {
+    let prefix = match mode {
+        Mode::Build => "┌─[BUILD]".bright_blue(),
+        Mode::Plan => "┌─[PLAN]".bright_yellow(),
+    };
+    print!("\r{}\n\r│ ", prefix);
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+}
+
+pub fn bot_prefix_with_mode(mode: &Mode) {
+    let prefix = match mode {
+        Mode::Build => "├─[BUILD]".bright_blue(),
+        Mode::Plan => "├─[PLAN]".bright_yellow(),
+    };
+    print!("\r{}\n", prefix);
+    print!("\r│ ");
+}
+=== Cargo.toml ===
+[package]
+name = "fuchecode"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.45"
+colored = "3.1.1"
+crossterm = "0.29.0"
+rodio = "0.19"
+dirs = "6.0.0"
+futures-util = "0.3.32"
+ratatui = "0.30.1"
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["full"] }
+toml = "1.1.2"
