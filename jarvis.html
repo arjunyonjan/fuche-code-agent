@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS · Magic Mode</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Google Sans', system-ui, sans-serif;
+            background: #0a0f1e;
+            color: #e0f2fe;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0f1e; }
+        ::-webkit-scrollbar-thumb { background: #06b6d4; border-radius: 3px; }
+
+        .glow-cyan { text-shadow: 0 0 20px #06b6d4, 0 0 40px #06b6d4, 0 0 80px #0891b2; }
+        .glow-green { text-shadow: 0 0 20px #34d399, 0 0 40px #10b981, 0 0 80px #059669; }
+        .glow-aqua { text-shadow: 0 0 20px #2dd4bf, 0 0 40px #14b8a6, 0 0 80px #0d9488; }
+        .border-glow { box-shadow: 0 0 15px rgba(6,182,212,0.3), inset 0 0 15px rgba(6,182,212,0.05); }
+        .border-glow-green { box-shadow: 0 0 15px rgba(52,211,153,0.3), inset 0 0 15px rgba(52,211,153,0.05); }
+        .border-glow-aqua { box-shadow: 0 0 15px rgba(45,212,191,0.3), inset 0 0 15px rgba(45,212,191,0.05); }
+
+        .scanline {
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(6,182,212,0.03) 2px,
+                rgba(6,182,212,0.03) 4px
+            );
+        }
+
+        .ring-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ring { position: absolute; border-radius: 50%; border: 1px solid; opacity: 0.6; }
+        .ring-inner { width: 60px; height: 60px; border-color: #34d399; animation: pulse 3s ease-in-out infinite; }
+        .ring-mid { width: 100px; height: 100px; border-color: #06b6d4; animation: pulse 4s ease-in-out infinite 0.5s; }
+        .ring-outer { width: 140px; height: 140px; border-color: #2dd4bf; animation: pulse 5s ease-in-out infinite 1s; }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .globe-wire {
+            stroke-dasharray: 4 4;
+            animation: dash 3s linear infinite;
+        }
+        @keyframes dash { to { stroke-dashoffset: -24; } }
+
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes spin-slower { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+        .animate-spin-slower { animation: spin-slower 30s linear infinite; }
+
+        .equalizer-bar { animation: equalize 1.2s ease-in-out infinite; transform-origin: bottom; }
+        .equalizer-bar:nth-child(1) { animation-delay: 0s; }
+        .equalizer-bar:nth-child(2) { animation-delay: 0.15s; }
+        .equalizer-bar:nth-child(3) { animation-delay: 0.3s; }
+        .equalizer-bar:nth-child(4) { animation-delay: 0.45s; }
+        .equalizer-bar:nth-child(5) { animation-delay: 0.6s; }
+        .equalizer-bar:nth-child(6) { animation-delay: 0.75s; }
+        .equalizer-bar:nth-child(7) { animation-delay: 0.9s; }
+        .equalizer-bar:nth-child(8) { animation-delay: 1.05s; }
+
+        @keyframes equalize {
+            0%, 100% { height: 20%; }
+            25% { height: 80%; }
+            50% { height: 40%; }
+            75% { height: 90%; }
+        }
+
+        .hud-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw-line 2s ease forwards;
+        }
+        @keyframes draw-line { to { stroke-dashoffset: 0; } }
+
+        .phase-card {
+            transition: all 0.3s ease;
+        }
+        .phase-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(6,182,212,0.2), inset 0 0 30px rgba(6,182,212,0.05);
+        }
+
+        .glow-pulse {
+            animation: glow-pulse 2s ease-in-out infinite;
+        }
+        @keyframes glow-pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .typewriter {
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 2px solid #06b6d4;
+            animation: typing 3s steps(40) forwards, blink-caret 0.75s step-end infinite;
+            width: 0;
+        }
+        @keyframes typing { to { width: 100%; } }
+        @keyframes blink-caret { 50% { border-color: transparent; } }
+
+        .star { position: absolute; background: white; border-radius: 50%; opacity: 0.3; animation: twinkle 2s ease-in-out infinite; }
+        @keyframes twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.8; } }
+    </style>
+</head>
+<body>
+
+<!-- Starfield background -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden">
+    <div class="star" style="width:2px;height:2px;top:10%;left:5%;animation-delay:0s;"></div>
+    <div class="star" style="width:1px;height:1px;top:20%;left:15%;animation-delay:0.5s;"></div>
+    <div class="star" style="width:2px;height:2px;top:5%;left:25%;animation-delay:1s;"></div>
+    <div class="star" style="width:1px;height:1px;top:30%;left:8%;animation-delay:0.3s;"></div>
+    <div class="star" style="width:3px;height:3px;top:15%;left:35%;animation-delay:0.8s;"></div>
+    <div class="star" style="width:1px;height:1px;top:35%;left:50%;animation-delay:1.2s;"></div>
+    <div class="star" style="width:2px;height:2px;top:8%;left:60%;animation-delay:0.2s;"></div>
+    <div class="star" style="width:1px;height:1px;top:25%;left:75%;animation-delay:0.7s;"></div>
+    <div class="star" style="width:2px;height:2px;top:12%;left:85%;animation-delay:1.5s;"></div>
+    <div class="star" style="width:1px;height:1px;top:40%;left:92%;animation-delay:0.4s;"></div>
+    <div class="star" style="width:2px;height:2px;top:45%;left:12%;animation-delay:0.9s;"></div>
+    <div class="star" style="width:1px;height:1px;top:50%;left:30%;animation-delay:0.1s;"></div>
+</div>
+
+<!-- ====== HERO ====== -->
+<section class="relative min-h-screen flex flex-col items-center justify-center px-4 py-20 scanline">
+    <div class="absolute inset-0 bg-gradient-radial from-cyan-900/10 via-transparent to-transparent"></div>
+
+    <!-- Top right badge -->
+    <div class="absolute top-6 right-6 flex items-center gap-2 text-xs text-cyan-400/60 border border-cyan-400/20 rounded-full px-4 py-1.5">
+        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+        SYSTEM ONLINE
+    </div>
+
+    <!-- Glowing ring emblem -->
+    <div class="relative mb-8">
+        <div class="animate-spin-slow w-32 h-32 rounded-full border border-cyan-400/20 absolute -top-4 -left-4"></div>
+        <div class="animate-spin-slower w-40 h-40 rounded-full border border-emerald-400/10 absolute -top-8 -left-8"></div>
+        <div class="w-24 h-24 rounded-full bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 flex items-center justify-center border border-cyan-400/30 border-glow">
+            <span class="text-5xl glow-cyan">🧙‍♂️</span>
+        </div>
+    </div>
+
+    <h1 class="text-7xl font-black tracking-tight mb-2 glow-cyan" style="font-family:'Google Sans',sans-serif;">
+        <span class="bg-gradient-to-r from-cyan-400 via-emerald-300 to-cyan-400 bg-clip-text text-transparent">MAGIC</span>
+    </h1>
+    <p class="text-2xl font-light text-cyan-300/60 mb-2 glow-aqua">/// J.A.R.V.I.S. PROTOCOL</p>
+    <p class="text-sm text-cyan-400/40 mb-10 font-mono">$ /magic — activate tron mode</p>
+
+    <!-- Typewriter Jarvis line -->
+    <div class="max-w-2xl text-center">
+        <p class="text-lg font-mono text-emerald-300/80 typewriter" style="display:inline-block;">
+            🤖 "Good evening, sir. Systems are online and ready."
+        </p>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-8 animate-bounce text-cyan-400/40 text-2xl">↓</div>
+</section>
+
+<!-- ====== JARVIS DASHBOARD PREVIEW ====== -->
+<section class="relative px-4 py-16 max-w-6xl mx-auto">
+    <div class="text-center mb-12">
+        <p class="text-xs font-mono text-cyan-400/40 mb-2">// REAL-TIME HUD PREVIEW</p>
+        <h2 class="text-4xl font-bold text-white glow-aqua">Terminal Dashboard</h2>
+        <p class="text-cyan-300/50 mt-2">What /magic renders in your terminal — pure Ratatui + ANSI</p>
+    </div>
+
+    <!-- Terminal mockup -->
+    <div class="rounded-xl border border-cyan-400/20 border-glow overflow-hidden bg-[#0a0f1e] font-mono text-xs">
+        <!-- Terminal header -->
+        <div class="flex items-center gap-2 px-4 py-2 border-b border-cyan-400/10 bg-cyan-950/30">
+            <span class="w-3 h-3 rounded-full bg-red-500/50"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500/50"></span>
+            <span class="w-3 h-3 rounded-full bg-green-500/50"></span>
+            <span class="text-cyan-400/40 ml-2">fuchecode — magic mode</span>
+        </div>
+
+        <!-- Terminal body -->
+        <div class="p-4 space-y-2 leading-relaxed" style="background: #050a14;">
+            <p><span class="text-cyan-400">┌─[</span><span class="text-emerald-400">MAGIC</span><span class="text-cyan-400">]────────────────────────────────────────────┐</span></p>
+            <p><span class="text-cyan-400">│</span>                                                                      <span class="text-cyan-400">│</span></p>
+
+            <!-- Top row: Globe + Rings + Stats -->
+            <p><span class="text-cyan-400">│</span>  <span class="text-emerald-400">🌍</span> <span class="text-cyan-300">SPINNING EARTH</span>          <span class="text-emerald-400">⏺️</span> <span class="text-cyan-300">ENGINEERING RINGS</span>        <span class="text-emerald-400">📊</span> <span class="text-cyan-300">SYSTEM STATS</span>  <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>                                                                      <span class="text-cyan-400">│</span></p>
+
+            <!-- Globe SVG preview -->
+            <p><span class="text-cyan-400">│</span>  <span class="text-gray-500">┌─── GLOBE ───┐</span>     <span class="text-gray-500">┌── RINGS ──┐</span>     <span class="text-gray-500">┌── STATUS ────┐</span>    <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-cyan-300/60">│</span>  <span class="text-emerald-400">⨁</span> <span class="text-cyan-300/60">│</span>      <span class="text-emerald-400/60">( ( ( ● ) ) )</span>  <span class="text-cyan-400">ENG LVL 7</span>     <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-gray-500">└────────────┘</span>     <span class="text-gray-500">└──────────┘</span>     <span class="text-cyan-400">77 TESTS ✅</span>     <span class="text-cyan-400">│</span></p>
+
+            <p><span class="text-cyan-400">│</span>                                                                      <span class="text-cyan-400">│</span></p>
+
+            <!-- EQ Visualizer -->
+            <p><span class="text-cyan-400">│</span>  <span class="text-emerald-400">🎸</span> <span class="text-cyan-300">AUDIO SPECTRUM</span>  ▂▃▄▅▆▇█▇▆▅▄▃▂  <span class="text-cyan-300/60">AC/DC — Thunderstruck</span>         <span class="text-cyan-400">│</span></p>
+
+            <p><span class="text-cyan-400">│</span>  <span class="text-gray-500">┌── EQ ───────────────┐</span>                                   <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-cyan-300">│</span> Bass:  <span class="text-emerald-400">███████</span><span class="text-gray-600">░░░</span> +6dB  <span class="text-cyan-300">│</span>  <span class="text-emerald-400">JARVIS</span> <span class="text-cyan-400">▰▰▰▰▰▰▰▰▰▰</span>   <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-cyan-300">│</span> Mid:   <span class="text-emerald-400">█████</span><span class="text-gray-600">░░░░░</span> +3dB  <span class="text-cyan-300">│</span>  <span class="text-emerald-400">MUSIC</span>  <span class="text-cyan-400">▰▰▰▰▰▰░░░░</span>   <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-cyan-300">│</span> Treble:<span class="text-emerald-400">████████</span><span class="text-gray-600">░░</span> +8dB  <span class="text-cyan-300">│</span>                                   <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-gray-500">└──────────────────────┘</span>                                   <span class="text-cyan-400">│</span></p>
+
+            <p><span class="text-cyan-400">│</span>                                                                      <span class="text-cyan-400">│</span></p>
+
+            <!-- Jarvis speech -->
+            <p><span class="text-cyan-400">│</span>  <span class="text-emerald-400">🤖</span> <span class="text-emerald-300">JARVIS:</span> <span class="text-cyan-200">"Good evening, sir. We tamed Rust, bent an LLM to our will,</span>    <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">│</span>  <span class="text-cyan-200">         and built a terminal that thinks it's a starship. Shall we?"</span>      <span class="text-cyan-400">│</span></p>
+
+            <p><span class="text-cyan-400">│</span>                                                                      <span class="text-cyan-400">│</span></p>
+            <p><span class="text-cyan-400">└─[</span><span class="text-emerald-400">MAGIC</span><span class="text-cyan-400">]────────────────────────────────────────────┘</span></p>
+
+            <p class="mt-3"><span class="text-cyan-400">┌─[</span><span class="text-emerald-400">MAGIC</span><span class="text-cyan-400">]</span> <span class="text-emerald-300/60">/magic exit — return to normal mode</span></p>
+        </div>
+    </div>
+</section>
+
+<!-- ====== SVG WIREFRAMES ====== -->
+<section class="relative px-4 py-16 max-w-6xl mx-auto">
+    <div class="text-center mb-12">
+        <p class="text-xs font-mono text-cyan-400/40 mb-2">// WIREFRAME COMPONENTS</p>
+        <h2 class="text-4xl font-bold text-white glow-cyan">HUD Elements</h2>
+        <p class="text-cyan-300/50 mt-2">SVG prototypes for the terminal Canvas renderer</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+        <!-- Spinning Globe -->
+        <div class="rounded-xl border border-cyan-400/15 border-glow p-6 bg-cyan-950/20 phase-card">
+            <p class="text-xs font-mono text-cyan-400/40 mb-3">// globe.rs</p>
+            <h3 class="text-lg font-semibold text-cyan-300 mb-4">🌍 Spinning Earth</h3>
+            <div class="flex justify-center">
+                <svg viewBox="0 0 120 120" class="w-28 h-28">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#06b6d4" stroke-width="0.5" opacity="0.3"/>
+                    <!-- Longitude lines -->
+                    <ellipse cx="60" cy="60" rx="50" ry="15" fill="none" stroke="#06b6d4" stroke-width="0.5" opacity="0.4"/>
+                    <ellipse cx="60" cy="60" rx="50" ry="30" fill="none" stroke="#06b6d4" stroke-width="0.5" opacity="0.4"/>
+                    <ellipse cx="60" cy="60" rx="30" ry="50" fill="none" stroke="#2dd4bf" stroke-width="0.5" opacity="0.4"/>
+                    <ellipse cx="60" cy="60" rx="15" ry="50" fill="none" stroke="#2dd4bf" stroke-width="0.5" opacity="0.4"/>
+                    <!-- Latitude lines -->
+                    <ellipse cx="60" cy="60" rx="50" ry="8" fill="none" stroke="#34d399" stroke-width="0.3" opacity="0.2" class="globe-wire"/>
+                    <ellipse cx="60" cy="60" rx="50" ry="20" fill="none" stroke="#34d399" stroke-width="0.3" opacity="0.2" class="globe-wire"/>
+                    <ellipse cx="60" cy="60" rx="50" ry="40" fill="none" stroke="#34d399" stroke-width="0.3" opacity="0.2" class="globe-wire"/>
+                    <!-- Nepal marker -->
+                    <circle cx="68" cy="35" r="2" fill="#34d399" opacity="0.8"/>
+                    <text x="72" y="33" fill="#34d399" font-size="5" opacity="0.6">🇳🇵</text>
+                    <!-- Spinning dots -->
+                    <circle cx="85" cy="30" r="1.5" fill="#06b6d4" opacity="0.6">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="8s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="95" cy="55" r="1" fill="#2dd4bf" opacity="0.4">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="12s" repeatCount="indefinite"/>
+                    </circle>
+                </svg>
+            </div>
+            <p class="text-xs text-cyan-400/40 mt-3 font-mono text-center">ratatui::Canvas::project(3D→2D)</p>
+        </div>
+
+        <!-- Engineering Rings -->
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-6 bg-emerald-950/20 phase-card">
+            <p class="text-xs font-mono text-emerald-400/40 mb-3">// rings.rs</p>
+            <h3 class="text-lg font-semibold text-emerald-300 mb-4">⏺️ Engineering Rings</h3>
+            <div class="flex justify-center">
+                <svg viewBox="0 0 120 120" class="w-28 h-28">
+                    <circle cx="60" cy="60" r="55" fill="none" stroke="#34d399" stroke-width="0.5" opacity="0.15"/>
+                    <!-- Level rings -->
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#34d399" stroke-width="1" opacity="0.3"
+                        stroke-dasharray="4 6">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="10s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="60" cy="60" r="40" fill="none" stroke="#06b6d4" stroke-width="1.5" opacity="0.4"
+                        stroke-dasharray="8 6">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="15s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="60" cy="60" r="30" fill="none" stroke="#2dd4bf" stroke-width="2" opacity="0.5"
+                        stroke-dasharray="12 4">
+                        <animateTransform attributeName="transform" type="rotate" from="360 60 60" to="0 60 60" dur="20s" repeatCount="indefinite"/>
+                    </circle>
+                    <!-- Center emblem -->
+                    <text x="60" y="64" text-anchor="middle" fill="#34d399" font-size="20" font-weight="bold" opacity="0.8">7</text>
+                    <text x="60" y="80" text-anchor="middle" fill="#34d399" font-size="5" opacity="0.4">ENG LVL</text>
+                    <!-- Orbiting dots -->
+                    <circle cx="60" cy="10" r="2" fill="#34d399" opacity="0.6">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="4s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="60" cy="20" r="1.5" fill="#06b6d4" opacity="0.4">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="6s" repeatCount="indefinite"/>
+                    </circle>
+                </svg>
+            </div>
+            <p class="text-xs text-emerald-400/40 mt-3 font-mono text-center">stats → level rings</p>
+        </div>
+
+        <!-- Spectrum Analyzer -->
+        <div class="rounded-xl border border-aqua-400/15 border-glow-aqua p-6 bg-teal-950/20 phase-card">
+            <p class="text-xs font-mono text-teal-400/40 mb-3">// spectrum.rs</p>
+            <h3 class="text-lg font-semibold text-teal-300 mb-4">📊 Audio Spectrum</h3>
+            <div class="flex justify-center">
+                <svg viewBox="0 0 120 80" class="w-full h-20">
+                    <!-- EQ bars -->
+                    <rect class="equalizer-bar" x="5" y="40%" width="8" height="60%" rx="2" fill="#06b6d4" opacity="0.8"/>
+                    <rect class="equalizer-bar" x="16" y="20%" width="8" height="80%" rx="2" fill="#2dd4bf" opacity="0.8"/>
+                    <rect class="equalizer-bar" x="27" y="50%" width="8" height="50%" rx="2" fill="#34d399" opacity="0.8"/>
+                    <rect class="equalizer-bar" x="38" y="10%" width="8" height="90%" rx="2" fill="#06b6d4" opacity="0.9"/>
+                    <rect class="equalizer-bar" x="49" y="30%" width="8" height="70%" rx="2" fill="#2dd4bf" opacity="0.8"/>
+                    <rect class="equalizer-bar" x="60" y="60%" width="8" height="40%" rx="2" fill="#34d399" opacity="0.7"/>
+                    <rect class="equalizer-bar" x="71" y="15%" width="8" height="85%" rx="2" fill="#06b6d4" opacity="0.9"/>
+                    <rect class="equalizer-bar" x="82" y="35%" width="8" height="65%" rx="2" fill="#2dd4bf" opacity="0.8"/>
+                    <rect class="equalizer-bar" x="93" y="45%" width="8" height="55%" rx="2" fill="#34d399" opacity="0.7"/>
+                    <rect class="equalizer-bar" x="104" y="25%" width="8" height="75%" rx="2" fill="#06b6d4" opacity="0.8"/>
+                    <!-- Baseline -->
+                    <line x1="0" y1="78" x2="120" y2="78" stroke="#06b6d4" stroke-width="0.5" opacity="0.2"/>
+                </svg>
+            </div>
+            <p class="text-xs text-teal-400/40 mt-3 font-mono text-center">rodio → cpal → ASCII bars</p>
+        </div>
+    </div>
+</section>
+
+<!-- ====== PHASES ====== -->
+<section class="relative px-4 py-16 max-w-6xl mx-auto">
+    <div class="text-center mb-12">
+        <p class="text-xs font-mono text-cyan-400/40 mb-2">// ROADMAP</p>
+        <h2 class="text-4xl font-bold text-white glow-aqua">Implementation Phases</h2>
+        <p class="text-cyan-300/50 mt-2">From foundation to full Jarvis protocol</p>
+    </div>
+
+    <!-- Phase 1 -->
+    <div class="rounded-xl border border-cyan-400/20 border-glow p-6 mb-4 bg-cyan-950/20 phase-card">
+        <div class="flex items-start gap-4">
+            <div class="text-3xl mt-1">⚡</div>
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">PHASE 1</span>
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/20">LIVE</span>
+                    <h3 class="text-lg font-semibold text-cyan-200">Skeleton — 0 new deps</h3>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3 text-sm text-cyan-300/70">
+                    <div>
+                        <p class="font-mono text-xs text-cyan-400/40 mb-1">// src/magic.rs</p>
+                        <ul class="space-y-1">
+                            <li>✅ <span class="text-emerald-300">/magic</span> command handler</li>
+                            <li>✅ Tron-themed HUD (pure ANSI)</li>
+                            <li>✅ ASCII spinning globe (longitude/latitude dots)</li>
+                            <li>✅ JARVIS greeting via <span class="text-cyan-200">ollama::single_turn</span></li>
+                            <li>✅ Simulated AC/DC drum beat (<span class="text-cyan-200">\a</span> bell rhythm)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="font-mono text-xs text-cyan-400/40 mb-1">// files</p>
+                        <ul class="space-y-1">
+                            <li><span class="text-cyan-200">src/magic.rs</span> — new module</li>
+                            <li><span class="text-cyan-200">commands.rs</span> — <span class="text-emerald-300">"/magic"</span> arm</li>
+                            <li><span class="text-cyan-200">main.rs</span> — add <span class="text-cyan-200">mod magic</span></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">no new deps</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">ANSI escapes</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">existing LLM call</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="rounded-xl border border-cyan-400/20 border-glow p-6 mb-4 bg-cyan-950/20 phase-card opacity-80">
+        <div class="flex items-start gap-4">
+            <div class="text-3xl mt-1">🎸</div>
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">PHASE 2</span>
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-yellow-500/20 text-yellow-300 border border-yellow-400/20">NEXT</span>
+                    <h3 class="text-lg font-semibold text-cyan-200">Audio + Visuals</h3>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3 text-sm text-cyan-300/70">
+                    <div>
+                        <p class="font-mono text-xs text-cyan-400/40 mb-1">// deps: rodio, symphonia, rand</p>
+                        <ul class="space-y-1">
+                            <li>⬜ <span class="text-emerald-300">rodio::OutputStream</span> — real MP3 playback</li>
+                            <li>⬜ Random AC/DC from <span class="text-cyan-200">~/.fuchecode/music/*.mp3</span></li>
+                            <li>⬜ Jarvis voice clips from <span class="text-cyan-200">~/.fuchecode/voices/</span></li>
+                            <li>⬜ Ratatui Canvas spinning Earth (3D→2D projection)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="font-mono text-xs text-cyan-400/40 mb-1">// files</p>
+                        <ul class="space-y-1">
+                            <li><span class="text-cyan-200">src/audio.rs</span> — player + tracks</li>
+                            <li><span class="text-cyan-200">src/globe.rs</span> — Canvas sphere</li>
+                            <li><span class="text-cyan-200">Cargo.toml</span> — add rodio + rand</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">rodio</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">symphonia</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">rand</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">Ratatui Canvas</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="rounded-xl border border-cyan-400/20 border-glow p-6 mb-4 bg-cyan-950/20 phase-card opacity-60">
+        <div class="flex items-start gap-4">
+            <div class="text-3xl mt-1">🎚️</div>
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">PHASE 3</span>
+                    <h3 class="text-lg font-semibold text-cyan-200">Audio Control Panel</h3>
+                </div>
+                <ul class="space-y-1 text-sm text-cyan-300/70">
+                    <li>⬜ <span class="text-cyan-200">cpal</span> real-time capture → ASCII spectrum</li>
+                    <li>⬜ Volume faders: <span class="text-emerald-300">JARVIS</span> + <span class="text-emerald-300">MUSIC</span> sliders</li>
+                    <li>⬜ EQ: Bass / Mid / Treble controls</li>
+                    <li>⬜ All rendered as Ratatui widgets in magic loop</li>
+                </ul>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">cpal</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">Ratatui widgets</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">ASCII EQ</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="rounded-xl border border-cyan-400/20 border-glow p-6 bg-cyan-950/20 phase-card opacity-40">
+        <div class="flex items-start gap-4">
+            <div class="text-3xl mt-1">🧙‍♂️</div>
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="px-2 py-0.5 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">PHASE 4</span>
+                    <h3 class="text-lg font-semibold text-cyan-200">Persistent Magic Mode</h3>
+                </div>
+                <ul class="space-y-1 text-sm text-cyan-300/70">
+                    <li>⬜ <span class="text-cyan-200">/magic</span> toggles into separate render loop</li>
+                    <li>⬜ HUD stays visible; mini-prompt at bottom</li>
+                    <li>⬜ <span class="text-cyan-200">/magic exit</span> returns to normal mode</li>
+                    <li>⬜ Tron color scheme (cyan/blue on black)</li>
+                    <li>⬜ ASCII wireframe HUD with animated elements</li>
+                </ul>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">dedicated loop</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">Tron theme</span>
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400">overlay UI</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ====== JARVIS FEATURES ====== -->
+<section class="relative px-4 py-16 max-w-6xl mx-auto">
+    <div class="text-center mb-12">
+        <p class="text-xs font-mono text-cyan-400/40 mb-2">// FEATURE MATRIX</p>
+        <h2 class="text-4xl font-bold text-white glow-green">Jarvis Protocol</h2>
+        <p class="text-cyan-300/50 mt-2">Everything /magic brings to life</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-4">
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">🤖</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Jarvis Voice</h4>
+            <p class="text-xs text-emerald-300/50">Pre-recorded clips or TTS. Greetings, summaries, funny asides. Calls you "sir".</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">📊</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Daily Summary</h4>
+            <p class="text-xs text-emerald-300/50">LLM-generated recap of today's commits, tests, and wins. Layman terms. Funny.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">🌍</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Spinning Globe</h4>
+            <p class="text-xs text-emerald-300/50">3D wireframe Earth (or random solid) rotating in terminal. Ratatui Canvas projection.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">⏺️</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Engineering Rings</h4>
+            <p class="text-xs text-emerald-300/50">Concentric rings showing system level, test count, commit streak. Orbiting stat dots.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">🎸</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">AC/DC Player</h4>
+            <p class="text-xs text-emerald-300/50">Random track from ~/.fuchecode/music/. rodio backend. Shuffle on every /magic.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">🎚️</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Audio Control Panel</h4>
+            <p class="text-xs text-emerald-300/50">Volume faders, EQ sliders, spectrum analyzer. cpal real-time capture. ASCII bars.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">⚡</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Tron HUD</h4>
+            <p class="text-xs text-emerald-300/50">Cyan/blue on black. Scanlines, glowing borders, wireframe aesthetics. Full-screen overlay.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">🧪</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">77 Tests</h4>
+            <p class="text-xs text-emerald-300/50">Live test counter. Green checkmark when all pass. Engineering level scales with count.</p>
+        </div>
+        <div class="rounded-xl border border-emerald-400/15 border-glow-green p-5 bg-emerald-950/10">
+            <div class="text-2xl mb-2">📝</div>
+            <h4 class="text-emerald-300 font-semibold mb-1">Mini Prompt</h4>
+            <p class="text-xs text-emerald-300/50">Inline input in magic mode. Commands like /play, /volume, /eq work inside HUD.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ====== FOOTER ====== -->
+<section class="relative px-4 py-12 border-t border-cyan-400/10">
+    <div class="max-w-6xl mx-auto text-center">
+        <p class="text-xs font-mono text-cyan-400/30 mb-1">// FUCHECODE · JARVIS PROTOCOL</p>
+        <p class="text-xs text-gray-600">Phase 1 ready. Phase 2 building. The terminal is alive.</p>
+        <div class="flex justify-center gap-4 mt-4">
+            <span class="text-gray-700 text-xs">rodio</span>
+            <span class="text-emerald-700 text-xs">ratatui</span>
+            <span class="text-cyan-700 text-xs">cpal</span>
+            <span class="text-gray-700 text-xs">symphonia</span>
+            <span class="text-emerald-700 text-xs">ansi</span>
+            <span class="text-cyan-700 text-xs">canvas</span>
+        </div>
+    </div>
+</section>
+
+</body>
+</html>
