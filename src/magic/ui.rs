@@ -4,8 +4,9 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use ratatui::{
-    style::Color,
-    widgets::canvas::{Line as CLine, Painter, Shape},
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    widgets::{canvas::{Line as CLine, Painter, Shape}, Paragraph},
     Frame,
 };
 
@@ -119,8 +120,8 @@ pub fn draw(
     f: &mut Frame,
     _fps: u64,
     esc_pressed: bool,
-    _state: &Arc<Mutex<AudioState>>,
-    _track: &str,
+    state: &Arc<Mutex<AudioState>>,
+    track: &str,
     _last_key: &str,
     _gpu_temp: f64,
     _gpu_util: f64,
@@ -134,13 +135,31 @@ pub fn draw(
     _core_pcts: &[f64],
     _sparkline: &VecDeque<u8>,
 ) {
-    use ratatui::style::{Color, Style};
-    use ratatui::widgets::Paragraph;
+    let fg = Style::default().fg(Color::Rgb(0, 230, 200));
 
     if esc_pressed {
         let confirm = Paragraph::new("Press Esc again to exit, or any other key to continue")
             .style(Style::default().fg(Color::Rgb(255, 200, 0)))
             .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(confirm, f.area());
+        return;
     }
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(f.area());
+
+    let (track_name, paused, vol, muted) = match state.lock() {
+        Ok(s) => (track.to_string(), s.paused, s.volume, s.muted),
+        Err(_) => return,
+    };
+
+    let pause_sym = if paused { "⏸" } else { "▶" };
+    let mute_sym = if muted { "  🔇" } else { "" };
+    let status = format!(
+        "♫ {}   {}  {:>3.0}%{}     [ ]skip  -=vol  m mute  Space pause",
+        track_name, pause_sym, vol * 100.0, mute_sym
+    );
+    f.render_widget(Paragraph::new(status).style(fg), chunks[1]);
 }
