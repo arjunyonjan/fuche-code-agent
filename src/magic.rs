@@ -303,15 +303,13 @@ fn play_song(state: &Arc<Mutex<AudioState>>) {
     let path = s.songs[s.current].clone();
     s.track_name = extract_name(&path);
     let win = wsl_to_win(&path);
-    eprintln!("  ♫ Now playing [{}]: {}", s.current, s.track_name);
     let cmd = format!(
         "Add-Type -AssemblyName PresentationCore; \
          $p = New-Object System.Windows.Media.MediaPlayer; \
          $p.Open('{}'); $p.Play(); Start-Sleep 9999", win);
-    if let Ok(c) = std::process::Command::new("powershell.exe")
+    let _ = std::process::Command::new("powershell.exe")
         .args(["-Command", &cmd]).spawn()
-    { s.child = Some(c); }
-    else { eprintln!("  ❌ Failed to spawn powershell.exe"); }
+        .map(|c| s.child = Some(c));
     s.play_start = Instant::now();
     s.envelope_ready = false;
     s.amp_envelope.clear();
@@ -328,10 +326,7 @@ fn play_song(state: &Arc<Mutex<AudioState>>) {
 
 pub async fn run() {
     let songs = scan_mp3s();
-    if songs.is_empty() {
-        eprintln!("No MP3s found in ACDC folder");
-        return;
-    }
+    if songs.is_empty() { return; }
     let state = Arc::new(Mutex::new(AudioState {
         songs,
         current: 0, // play_song picks random on first call
