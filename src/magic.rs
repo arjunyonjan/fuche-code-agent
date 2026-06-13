@@ -213,45 +213,49 @@ fn bio_bar(val: f64, max: f64, invert: bool) -> String {
 
 fn play_chime() {
     std::thread::spawn(|| {
-        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
-        use rodio::Source;
-        let notes = [523.25, 659.25, 783.99]; // C5 E5 G5
-        for &freq in &notes {
-            let source = rodio::source::SineWave::new(freq)
-                .take_duration(std::time::Duration::from_millis(180))
-                .amplify(0.15);
-            if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { break; }
-            std::thread::sleep(std::time::Duration::from_millis(180));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(250));
+        let _ = std::panic::catch_unwind(|| {
+            use rodio::Source;
+            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
+            let notes = [523.25, 659.25, 783.99];
+            for &freq in &notes {
+                let source = rodio::source::SineWave::new(freq)
+                    .take_duration(std::time::Duration::from_millis(180))
+                    .amplify(0.15);
+                if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { break; }
+                std::thread::sleep(std::time::Duration::from_millis(180));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        });
     });
 }
 
 fn play_acdc(stop: Arc<AtomicBool>) {
     std::thread::spawn(move || {
-        use rodio::Source;
-        let path = "/mnt/c/Users/ACER/Downloads/Music/ACDC/Power Up (Prerelease Version) - AC-DC - Free Download, Borrow, and Streaming - Internet Archive.mp3";
-        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
-        let file = match std::fs::File::open(path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) else { return; };
-        if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { return; }
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            if stop.load(Ordering::Relaxed) { break; }
-        }
+        let _ = std::panic::catch_unwind(|| {
+            use rodio::Source;
+            let path = "/mnt/c/Users/ACER/Downloads/Music/ACDC/Power Up (Prerelease Version) - AC-DC - Free Download, Borrow, and Streaming - Internet Archive.mp3";
+            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else { return; };
+            let file = match std::fs::File::open(path) {
+                Ok(f) => f,
+                Err(_) => return,
+            };
+            let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) else { return; };
+            if stream_handle.play_raw(source.convert_samples::<f32>()).is_err() { return; }
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if stop.load(Ordering::Relaxed) { break; }
+            }
+        });
     });
 }
 
 pub async fn run(greeting: String) {
-    play_chime();
-    let stop_audio = Arc::new(AtomicBool::new(false));
-    play_acdc(stop_audio.clone());
     let mut terminal = ratatui::init();
     crossterm::terminal::enable_raw_mode().ok();
     crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture).ok();
+    play_chime();
+    let stop_audio = Arc::new(AtomicBool::new(false));
+    play_acdc(stop_audio.clone());
 
     let mut globe = WireframeGlobe::new(1.0);
     let mut frame_count = 0u64;
@@ -487,7 +491,7 @@ pub async fn run(greeting: String) {
             .ok();
 
         if crossterm::event::poll(Duration::from_millis(33)).ok().unwrap_or(false) {
-            if let crossterm::event::Event::Key(k) = crossterm::event::read().ok().unwrap() {
+            if let Ok(crossterm::event::Event::Key(k)) = crossterm::event::read() {
                 if k.code == crossterm::event::KeyCode::Esc {
                     stop_audio.store(true, Ordering::Relaxed);
                     break;

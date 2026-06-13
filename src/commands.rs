@@ -247,8 +247,10 @@ pub async fn handle(input: &str, current_model: &mut String, cfg: &mut Config) -
             let api_url = cfg.api_url();
             let model = current_model.clone();
             let timeout = cfg.timeout_secs;
-            let greeting = ollama::simple_chat(&api_url, &model, "Greet Tony Stark.", timeout).await;
-            crate::magic::run(greeting).await;
+            tokio::spawn(async move {
+                ollama::simple_chat(&api_url, &model, "Greet Tony Stark.", timeout).await;
+            });
+            crate::magic::run("Jarvis Online ⚡".to_string()).await;
             Ok(true)
         }
         _ if input.starts_with("/health ") => {
