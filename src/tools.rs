@@ -18,17 +18,22 @@ fn is_wsl() -> bool {
 fn adapt_command(cmd: &str) -> String {
     let trimmed = cmd.trim();
     if trimmed.starts_with("xdg-open ") || trimmed.starts_with("open ") {
-        let file = trimmed
+        let raw = trimmed
             .strip_prefix("xdg-open ")
             .or_else(|| trimmed.strip_prefix("open "))
             .unwrap_or("")
             .trim();
-        if !file.is_empty() {
+        if !raw.is_empty() {
+            let bare = if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() > 1 {
+                &raw[1..raw.len()-1]
+            } else {
+                raw
+            };
             if is_wsl() {
-                return format!("cmd.exe /c start \"\" \"$(wslpath -w '{}')\"", file.replace('\'', "'\\''"));
+                return format!("cmd.exe /c start \"\" \"$(wslpath -w '{}')\"", bare.replace('\'', "'\\''"));
             }
             if cfg!(target_os = "windows") {
-                return format!("start \"\" \"{}\"", file);
+                return format!("start \"\" \"{}\"", bare);
             }
         }
     }
@@ -355,7 +360,12 @@ pub fn run_command(command: &str, perms: &ToolPermission) -> String {
         return format!("⛔ Blocked: {}", reason);
     }
     crate::spinner::stop_global();
-    print!("\x1B[2K\r⚡ {}\n", command);
+    let display = if command.len() > 120 {
+        format!("{}...", &command[..117])
+    } else {
+        command.clone()
+    };
+    print!("\x1B[2K\r⚡ {}\n", display);
     let _ = std::io::stdout().flush();
     match std::process::Command::new("sh")
         .arg("-c")

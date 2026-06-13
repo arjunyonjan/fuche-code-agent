@@ -112,7 +112,7 @@ pub async fn single_turn(
     }
 }
 
-const SYSTEM_PROMPT: &str = "You MUST use the run_command tool for ANY terminal command, file operation, web request, or system task. NEVER generate fake command output yourself — always call the tool. After the tool returns, briefly summarize the result. For editing files use `sed -i 's/old/new/' file` or `cat >> file <<'EOF'`. For opening files use `xdg-open <file>`. NEVER install packages or start servers unless the user explicitly asks. Answer within 5 lines in simple layman terms. No jargon.";
+const SYSTEM_PROMPT: &str = "You MUST use the run_command tool for ANY terminal command, file operation, web request, or system task. NEVER generate fake command output yourself — always call the tool. After the tool returns, briefly summarize the result. For editing files use `sed -i` to edit in place. For opening files use `xdg-open <file>`. NEVER install packages or start servers unless the user explicitly asks. NEVER fake a result — always call the tool. When the user asks to update/create/edit/modify a file, you MUST call run_command to write the file. NEVER just show the new content in your response — write it to the file. Answer within 5 lines in simple layman terms. No jargon.";
 
 fn tool_defs() -> Value {
     json!([{
@@ -352,8 +352,6 @@ pub fn chat_stream(
                             .ok()
                             .and_then(|v| v["command"].as_str().map(|s| s.to_string()))
                             .unwrap_or_default();
-                        print!("\r⚡ {}\n", cmd);
-                        let _ = std::io::stdout().flush();
                         crate::tools::run_command(&cmd, &perms)
                     }
                     _ => format!("❌ Unknown tool: {}", name),

@@ -86,7 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             mapper::Action::PassThrough => {}
         }
 
-        let force_tool = input.starts_with("open ") || input.starts_with("ls") || input.starts_with("cat ") || input.starts_with("echo ")
+        let force_tool = input.starts_with("open ") || input.starts_with("add ") || input.starts_with("update ")
+            || input.starts_with("edit ") || input.starts_with("change ") || input.starts_with("modify ")
+            || input.starts_with("create ") || input.starts_with("write ") || input.starts_with("make ")
+            || input.starts_with("ls") || input.starts_with("cat ") || input.starts_with("echo ")
             || input.starts_with("pwd") || input.starts_with("whoami") || input.starts_with("which ")
             || input.starts_with("mkdir ") || input.starts_with("rm ") || input.starts_with("cp ")
             || input.starts_with("mv ") || input.starts_with("grep ") || input.starts_with("curl ")
