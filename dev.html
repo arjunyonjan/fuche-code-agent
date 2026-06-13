@@ -575,5 +575,197 @@ _          → Action::PassThrough (→ LLM loop)</div>
             <li>61. Bottom text in magic mode changed from <code>"hello world ⚡"</code> → dynamic Jarvis greeting</li>
         </ul>
     </div>
+    <!-- ====== Jun 13 Round 11 — Magic Audio + Minimal UI ====== -->
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🎯 Goal</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm font-medium mb-2">🎯 Goal</p>
+        <p class="text-sm text-gray-400 mb-4">Implement random MP3 audio playback in <code>/magic</code> command for fuchecode, with stable volume/pause controls and clean minimal UI.</p>
+
+        <p class="text-sm font-medium mb-2">⚙️ Constraints</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• Running on WSL2 (Linux kernel) with Windows 11 host</li>
+            <li>• Audio must play through Windows-side speakers using PowerShell MediaPlayer as fallback when rodio fails</li>
+            <li>• Cross-platform: rodio on native Linux/macOS, PowerShell on WSL</li>
+            <li>• Click-drag volume bar + clickable pause/−/+ buttons in bottom bar</li>
+            <li>• No chat panel (removed — was causing deadlocks)</li>
+            <li>• No telemetry panels rendered (code preserved but hidden)</li>
+            <li>• All <code>state.lock()</code> calls use <code>.ok()</code> instead of <code>.unwrap()</code> — no cascade panics</li>
+            <li>• Not bundling tests — step-by-step confirmation from user</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">✅ Progress — Done</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• <code>magic_audio_dir</code> field in <code>Config</code> with custom serde default, defaults to <code>/mnt/c/Users/ACER/Downloads/Music/ACDC</code></li>
+            <li>• Config auto-saves on load so missing fields get written to file</li>
+            <li>• Audio plays via one-shot PowerShell kill+respawn (proven working), using <code>-WindowStyle Hidden -NoProfile -Command "Add-Type ... MediaPlayer ... Start-Sleep 9999"</code></li>
+            <li>• Volume bar rendered at bottom-right with click-drag support</li>
+            <li>• Mouse click zones: volume bar drag, pause toggle, −/+ 10% buttons</li>
+            <li>• Keyboard: <code>[</code>/<code>]</code> skip, <code>-</code>/<code>=</code> volume ±10%, <code>Space</code> pause/resume, <code>Esc Esc</code> exit</li>
+            <li>• Frame cap: <code>std::thread::sleep(16ms)</code> added to main loop</li>
+            <li>• ALSA noise suppressed: skip <code>OutputStream::try_default()</code> entirely on WSL</li>
+            <li>• Deadlock fix: all <code>state.lock().unwrap()</code> → <code>state.lock().ok()</code> across mod.rs, audio.rs, ui.rs</li>
+            <li>• Chat panel removed (was causing key conflicts and deadlock)</li>
+            <li>• Telemetry panels hidden (GPU, CPU, RAM, biomarkers rendering commented out; code preserved with <code>#![allow(dead_code)]</code>)</li>
+            <li>• RAM bar height fixed (<code>Length(3)</code>→<code>Length(4)</code> so bar text not clipped)</li>
+            <li>• Bottom bar layout: track info (left) + fixed-width right section with pause/volume/−/+/padding sub-areas</li>
+            <li>• Magic code modularized from single <code>magic.rs</code> (837 lines) into <code>src/magic/</code> directory with <code>mod.rs</code> (178), <code>audio.rs</code> (188), <code>sys.rs</code> (127), <code>ui.rs</code> (214) — each &lt;250 lines, single responsibility</li>
+            <li>• Old <code>src/magic.rs</code> removed</li>
+            <li>• <strong>Build clean, zero warnings</strong></li>
+            <li>• ntfy.sh notifications after each build: <code>curl -d "message" https://ntfy.sh/fuche2026</code></li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">🔑 Key Decisions</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• <strong>Kill+respawn PowerShell per song</strong> instead of persistent stdin pipe: simpler, proven reliable for audio playback</li>
+            <li>• <strong>No <code>.</code> <code>,</code> key bindings</strong>: removed after causing deadlocks/confusion; volume uses <code>-</code>/<code>=</code> only</li>
+            <li>• <strong>All <code>state.lock()</code> → <code>.ok()</code></strong>: prevents cascade panic if background decode thread ever poisons the mutex</li>
+            <li>• <strong>Hide telemetry, don't delete</strong>: code preserved under <code>#![allow(dead_code)]</code> for future re-enablement</li>
+            <li>• <strong>Modularize magic</strong>: split into <code>audio.rs</code> / <code>sys.rs</code> / <code>ui.rs</code> / <code>mod.rs</code> for AI-agent-maintainable single-responsibility files</li>
+            <li>• <strong>Step-by-step testing</strong>: user explicitly requests one test at a time, no bundling</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">🐛 Bugs Fixed</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• <strong>PowerShell stdin not piped</strong> — <code>set_volume()</code> wrote to <code>/dev/null</code> because <code>s.stdin</code> was always <code>None</code>. Fixed: <code>.stdin(Stdio::piped())</code> + <code>s.stdin = child.stdin.take()</code></li>
+            <li>• <strong>Volume not sent to PowerShell</strong> — <code>$p.Volume = {:.2}</code> added to PowerShell command string so audio starts at correct level</li>
+            <li>• <strong>No visual feedback</strong> — blank screen made user think controls didn't work. Fixed: added <code>last_key</code> echo + track/vol/pause display</li>
+            <li>• <strong>Esc trap</strong> — accidental Esc press blocked all controls via <code>!esc_pressed</code> guards. Fixed: restored "Press Esc again to exit" prompt</li>
+            <li>• <strong>All <code>.unwrap()</code> removed</strong> — replaced with <code>.ok()</code> throughout magic module to prevent cascade panics</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">📍 Critical Context</p>
+        <ul class="text-sm space-y-1">
+            <li>• PowerShell spawn command: <code>powershell.exe -WindowStyle Hidden -NoProfile -Command "Add-Type -AssemblyName PresentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open('C:\path\to.mp3'); $p.Volume = 0.50; $p.Play(); Start-Sleep 9999"</code></li>
+            <li>• Path conversion: <code>/mnt/c/Users/ACER/...</code> → <code>C:\Users\ACER\...</code> via <code>wsl_to_win()</code> which strips <code>/mnt/</code>, extracts drive letter, and replaces <code>/</code> with <code>\\</code></li>
+            <li>• 4 MP3 files in the ACDC folder — audio pipeline confirmed working via direct PowerShell test</li>
+            <li>• WSL detection via <code>/proc/version</code> containing "microsoft"</li>
+            <li>• All <code>state.lock()</code> calls use <code>if let Ok</code> pattern — no <code>.unwrap()</code> remains anywhere in magic module</li>
+            <li>• ntfy.sh topic: <code>fuche2026</code> used for build notifications</li>
+            <li>• <code>#[serde(default = "default_magic_audio_dir")]</code> on the config field, not struct-level <code>#[serde(default)]</code></li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📜 All 54 Things We Did in This Session</h2>
+            <span class="text-xs text-gray-500">Jun 13 — final</span>
+        </div>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 1 — Skeleton + Config</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>1. Created <code>magic_audio_dir</code> config field with custom serde default</li>
+            <li>2. Config auto-saves on load to persist new fields</li>
+            <li>3. <code>commands.rs</code> — <code>/magic</code> dispatches to <code>magic::run()</code></li>
+            <li>4. <code>src/magic/</code> module directory created</li>
+            <li>5. <code>mod.rs</code> — main loop: terminal init, event polling, dispatch</li>
+            <li>6. <code>audio.rs</code> — AudioState, scan_mp3s, play_song, toggle_pause, set_volume</li>
+            <li>7. <code>sys.rs</code> — CPU/GPU/RAM/Biomarker readers</li>
+            <li>8. <code>ui.rs</code> — draw(), WireframeGlobe, telemetry panels, helpers</li>
+            <li>9. Old monolithic <code>src/magic.rs</code> removed</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 2 — Audio Pipeline</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>10. WSL detection via <code>/proc/version</code> — "microsoft" → use_powershell=true</li>
+            <li>11. <code>wsl_to_win()</code> — converts WSL path to Windows path</li>
+            <li>12. PowerShell kill+respawn per song — proven reliable</li>
+            <li>13. rodio sink fallback for native Linux/macOS</li>
+            <li>14. ALSA noise suppressed — skip <code>OutputStream::try_default()</code> on WSL</li>
+            <li>15. Background envelope decode thread for audio visualization</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 3 — Keyboard/Mouse Controls</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>16. Keyboard: <code>[</code>/<code>]</code> skip, <code>-</code>/<code>=</code> volume, <code>Space</code> pause, <code>Esc Esc</code> exit</li>
+            <li>17. Mouse: click-drag volume bar, click pause/−/+ buttons</li>
+            <li>18. Volume bar rendered at bottom-right with <code>█</code>/<code>░</code> blocks</li>
+            <li>19. Bottom bar: track info (left) + fixed-width controls (right)</li>
+            <li>20. Esc pressed: shows "Press Esc again to exit" prompt</li>
+            <li>21. Frame cap: <code>std::thread::sleep(16ms)</code></li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 4 — Modularization</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>22. <code>mod.rs</code> (178 lines) — entry point, event loop, telemetry sampling</li>
+            <li>23. <code>audio.rs</code> (188 lines) — playback, volume, pause, envelope decode</li>
+            <li>24. <code>sys.rs</code> (127 lines) — GPU/CPU/RAM readers</li>
+            <li>25. <code>ui.rs</code> (214 lines) — draw + telemetry + globe + helpers</li>
+            <li>26. Each file single-responsibility, &lt;250 lines, AI-agent-maintainable</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 5 — Safety + Deadlocks</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>27. <strong>All <code>.unwrap()</code> → <code>.ok()</code></strong> — every <code>state.lock()</code> in magic module</li>
+            <li>28. Chat panel removed (was causing deadlocks + key conflicts)</li>
+            <li>29. Telemetry panels hidden: GPU, CPU, RAM, biomarkers commented out</li>
+            <li>30. Code preserved under <code>#![allow(dead_code)]</code> for re-enablement</li>
+            <li>31. RAM bar height fixed: <code>Length(3)</code> → <code>Length(4)</code></li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 6 — Bug Fixes</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>32. <strong>PowerShell stdin not piped</strong> — <code>.stdin(Stdio::piped())</code> + <code>s.stdin = child.stdin.take()</code></li>
+            <li>33. <strong>Volume not in cmd</strong> — <code>$p.Volume = {:.2}</code> added to PowerShell command</li>
+            <li>34. <strong>No visual feedback</strong> — <code>last_key</code> echo + track/vol/pause display added</li>
+            <li>35. <strong>Esc trap</strong> — restored exit prompt when <code>esc_pressed</code></li>
+            <li>36. <strong>Unused imports</strong> — cleaned up in <code>ui.rs</code></li>
+            <li>37. <strong>Mouse event arms</strong> — fixed for <code>Event</code> match (not <code>Result</code>)</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 7 — Debugging</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>38. Key event logger writes to <code>/tmp/fuche_magic_keys.log</code></li>
+            <li>39. Log analysis: all <code>Char</code> events received, control keys (Space/[/]/=) absent from log</li>
+            <li>40. Root cause: stdin never piped → volume writes silently dropped</li>
+            <li>41. Secondary cause: <code>esc_pressed</code> stuck true → all <code>!esc_pressed</code> guards fail</li>
+            <li>42. Tertiary: blank screen = zero user feedback</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Phase 8 — DevOps</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>43. ntfy.sh notifications after each build</li>
+            <li>44. ntfy topic: <code>fuche2026</code></li>
+            <li>45. Release binary at <code>target/release/fuchecode</code></li>
+            <li>46. <code>.bashrc</code> alias → direct binary path</li>
+            <li>47. Build always clean, zero warnings</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Key Files</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>48. <code>src/magic/mod.rs</code> — magic mode entry point, event loop, init/cleanup</li>
+            <li>49. <code>src/magic/audio.rs</code> — AudioState struct + all playback/volume/pause functions</li>
+            <li>50. <code>src/magic/sys.rs</code> — CPU/GPU/RAM/Biomarkers readers (dormant)</li>
+            <li>51. <code>src/magic/ui.rs</code> — draw() (minimal: esc prompt + debug overlay), dormant globe/telemetry</li>
+            <li>52. <code>src/config.rs</code> — Config struct with <code>magic_audio_dir</code> field</li>
+            <li>53. <code>src/commands.rs</code> — dispatches <code>/magic</code> → <code>magic::run()</code></li>
+            <li>54. <code>~/.fuchecode/config.toml</code> — now has <code>magic_audio_dir</code></li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>⏭️ Next Steps</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ol class="text-sm space-y-2">
+            <li><strong>TEST current build</strong> — run <code>/magic</code>, press Space/<code>[</code>/<code>]</code>/<code>-</code>/<code>=</code>/Esc, verify:
+                <ul class="ml-4 mt-1 space-y-1 text-gray-400">
+                    <li>• <code>[key: ...]</code> echo shows each press → confirms input works</li>
+                    <li>• Audio responds to Space (pause/resume)</li>
+                    <li>• Audio responds to <code>[</code> <code>]</code> (skip track)</li>
+                    <li>• Volume % updates on <code>-</code> <code>=</code> (and actual audio volume changes via piped stdin)</li>
+                    <li>• Esc Esc exits</li>
+                </ul>
+            </li>
+            <li>If controls work → strip back to <strong>blank screen</strong> (remove debug overlay, keep <code>esc_pressed</code> prompt)</li>
+            <li>If controls still broken → investigate deeper (raw mode, terminal quirks, WSL event handling)</li>
+            <li>Fix background thread mutex contention on rapid key repeats</li>
+        </ol>
+    </div>
+
 </body>
 </html>

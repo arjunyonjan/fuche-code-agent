@@ -8,6 +8,10 @@ pub struct ProviderDef {
     pub url: String,
 }
 
+fn default_magic_audio_dir() -> String {
+    "/mnt/c/Users/ACER/Downloads/Music/ACDC".into()
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -17,6 +21,8 @@ pub struct Config {
     pub timeout_secs: u64,
     pub history_limit: usize,
     pub show_tokens: bool,
+    #[serde(default = "default_magic_audio_dir")]
+    pub magic_audio_dir: String,
 }
 
 impl Default for Config {
@@ -38,6 +44,7 @@ impl Default for Config {
             timeout_secs: 15,
             history_limit: 20,
             show_tokens: true,
+            magic_audio_dir: "/mnt/c/Users/ACER/Downloads/Music/ACDC".into(),
         }
     }
 }
@@ -45,14 +52,14 @@ impl Default for Config {
 impl Config {
     pub fn load() -> Self {
         let path = Self::get_config_path();
-        if path.exists() {
+        let config = if path.exists() {
             let contents = fs::read_to_string(path).unwrap_or_default();
             toml::from_str(&contents).unwrap_or_else(|_| Self::default())
         } else {
-            let config = Self::default();
-            config.save();
-            config
-        }
+            Self::default()
+        };
+        config.save();
+        config
     }
 
     pub fn save(&self) {
