@@ -289,6 +289,89 @@ mod tests {
         let result = delete_file("/tmp/any.txt", &plan_perms());
         assert!(result.contains("⛔"));
     }
+
+    #[test]
+    fn test_apply_patch_search_replace() {
+        let path = "/tmp/fuchecode_patch_sr.txt";
+        fs::write(path, "hello foo world").unwrap();
+        let ops = vec![serde_json::json!({"op": "search_replace", "old": "foo", "new": "bar"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "hello bar world");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_multi_hunk() {
+        let path = "/tmp/fuchecode_patch_multi.txt";
+        fs::write(path, "a\nb\nc\n").unwrap();
+        let ops = vec![
+            serde_json::json!({"op": "search_replace", "old": "a", "new": "x"}),
+            serde_json::json!({"op": "search_replace", "old": "c", "new": "z"}),
+        ];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("2 hunks"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "x\nb\nz\n");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_delete() {
+        let path = "/tmp/fuchecode_patch_del.txt";
+        fs::write(path, "keep1\ndelete_me\nkeep2").unwrap();
+        let ops = vec![serde_json::json!({"op": "delete", "old": "delete_me\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "keep1\nkeep2");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_insert_after() {
+        let path = "/tmp/fuchecode_patch_after.txt";
+        fs::write(path, "<body>\n</html>").unwrap();
+        let ops = vec![serde_json::json!({"op": "insert_after", "old": "<body>", "new": "  <main>hi</main>\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "<body>  <main>hi</main>\n\n</html>");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_insert_before() {
+        let path = "/tmp/fuchecode_patch_before.txt";
+        fs::write(path, "</body>\n</html>").unwrap();
+        let ops = vec![serde_json::json!({"op": "insert_before", "old": "</body>", "new": "  <footer>\n"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("✅ Patched"), "result: {}", result);
+        assert_eq!(fs::read_to_string(path).unwrap(), "  <footer>\n</body>\n</html>");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_hunk_failure() {
+        let path = "/tmp/fuchecode_patch_fail.txt";
+        fs::write(path, "hello world").unwrap();
+        let ops = vec![serde_json::json!({"op": "search_replace", "old": "nonexistent", "new": "bar"})];
+        let result = apply_patch(path, &ops, &build_perms());
+        assert!(result.contains("❌"), "result: {}", result);
+        assert!(result.contains("Hunk 1/1"));
+        assert!(result.contains("pattern not found"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_apply_patch_empty_file_denied() {
+        let result = apply_patch("", &[], &build_perms());
+        assert!(result.contains("❌"));
+        assert!(result.contains("No file specified"));
+    }
+
+    #[test]
+    fn test_apply_patch_denied_in_plan() {
+        let result = apply_patch("/tmp/any.txt", &[], &plan_perms());
+        assert!(result.contains("⛔"));
+    }
 }
 
 pub fn edit_file(path: &str, old: &str, new: &str, perms: &ToolPermission) -> String {
@@ -307,6 +390,68 @@ pub fn edit_file(path: &str, old: &str, new: &str, perms: &ToolPermission) -> St
             }
         }
         Err(e) => format!("❌ Error reading: {}", e),
+    }
+}
+
+pub fn apply_patch(file: &str, operations: &[serde_json::Value], perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    if file.is_empty() {
+        return "❌ No file specified".to_string();
+    }
+    let mut content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(e) => return format!("❌ Error reading {}: {}", file, e),
+    };
+    let total = operations.len();
+    for (i, op) in operations.iter().enumerate() {
+        let kind = op["op"].as_str().unwrap_or("");
+        let old = op["old"].as_str().unwrap_or("");
+        let new = op["new"].as_str().unwrap_or("");
+        match kind {
+            "search_replace" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty search pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: pattern not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, new, 1);
+            }
+            "delete" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty search pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: pattern not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, "", 1);
+            }
+            "insert_after" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty anchor pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: anchor not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, &format!("{}{}", old, new), 1);
+            }
+            "insert_before" => {
+                if old.is_empty() {
+                    return format!("❌ Hunk {}/{}: empty anchor pattern", i + 1, total);
+                }
+                if !content.contains(old) {
+                    return format!("❌ Hunk {}/{}: anchor not found in {}", i + 1, total, file);
+                }
+                content = content.replacen(old, &format!("{}{}", new, old), 1);
+            }
+            _ => return format!("❌ Hunk {}/{}: unknown op '{}'", i + 1, total, kind),
+        }
+    }
+    match fs::write(file, &content) {
+        Ok(_) => format!("✅ Patched {} ({} hunk{})", file, total, if total == 1 { "" } else { "s" }),
+        Err(e) => format!("❌ Error writing {}: {}", file, e),
     }
 }
 

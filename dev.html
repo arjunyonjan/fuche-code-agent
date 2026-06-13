@@ -62,7 +62,7 @@
             <li>• ClawRouter port fixed to 8402 in config</li>
             <li>• Release binary built at <code>target/release/fuchecode</code></li>
             <li>• <code>.bashrc</code> alias → direct binary path</li>
-            <li>• All 36 tests passing</li>
+            <li>• All 77 tests passing</li>
         </ul>
 
         <p class="text-sm font-medium mb-2">🔑 Key Decisions</p>
@@ -74,11 +74,13 @@
             <li>• CR health check only runs when <code>current_provider == "clawrouter"</code></li>
             <li>• <code>/cd</code> resets CWD for all subsequent <code>run_command</code> calls</li>
             <li>• <strong>Mapper + single_turn</strong> — deterministic intent matching pre-LLM; LLM only for language, not execution</li>
+            <li>• Two tools in <code>ollama.rs::tool_defs()</code>: <code>run_command</code> (shell) + <code>apply_patch</code> (native surgical edits)</li>
+            <li>• <code>apply_patch</code> preferred for targeted edits — per-hunk error reporting; LLM retries via existing tool loop</li>
         </ul>
 
         <p class="text-sm font-medium mb-2">📍 Critical Context</p>
         <ul class="text-sm space-y-1">
-            <li>• <code>run_command</code> is the only callable tool</li>
+            <li>• Two callable tools: <code>run_command</code> (shell exec) + <code>apply_patch</code> (surgical edits)</li>
             <li>• ClawRouter must be running (<code>npx @blockrun/clawrouter@latest</code>) for CR provider</li>
             <li>• <code>NVIDIA_API_KEY</code> must be exported in shell for NVIDIA provider</li>
             <li>• <code>free/deepseek-v4-flash</code> on ClawRouter does <strong>not</strong> support function calling — use <code>auto</code> (→ <code>free/gpt-oss-120b</code>)</li>
@@ -250,6 +252,103 @@ User sees response</div>
             <tr><td class="py-1">Build</td><td class="text-right green">execute: true ✅</td></tr>
             <tr><td class="py-1">Plan</td><td class="text-right red">execute: false ❌</td></tr>
         </table>
+    </div>
+
+    <!-- ====== Jun 13 Round 2 ====== -->
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧩 apply_patch — Native Surgical Tool</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">Replaces <code>apply_patch &lt;&lt;'PATCH'</code> shell fallback with a Rust-native tool. Surgical edits with per-hunk error reporting; LLM retries naturally via the existing tool loop.</p>
+
+        <h2>📐 Tool Schema</h2>
+        <ul class="text-sm space-y-1 mb-3">
+            <li>• <code>file</code> — path to the file</li>
+            <li>• <code>operations</code> — ordered array of edit ops:
+                <ul class="ml-4 mt-1 space-y-1">
+                    <li><code>search_replace</code> — find <code>old</code> and replace with <code>new</code></li>
+                    <li><code>delete</code> — remove <code>old</code> text</li>
+                    <li><code>insert_after</code> — place <code>new</code> after <code>old</code></li>
+                    <li><code>insert_before</code> — place <code>new</code> before <code>old</code></li>
+                </ul>
+            </li>
+        </ul>
+
+        <h2>🔄 Error Recovery</h2>
+        <p class="text-sm text-gray-400">When a hunk fails, <code>apply_patch</code> returns <code>❌ Hunk 2/4: pattern not found in file.html</code>. The LLM sees the error and can fix the hunk on the next turn — no extra Rust loop needed.</p>
+
+        <h2>🧪 Tests</h2>
+        <ul class="text-sm space-y-1">
+            <li>✅ 8 tests: search_replace, multi_hunk, delete, insert_after, insert_before, hunk_failure, empty_file, plan_denied</li>
+            <li>✅ Added as second tool in <code>ollama.rs::tool_defs()</code></li>
+            <li>✅ Handler in <code>chat_stream()</code> dispatch loop</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>♻️ Mapper Refactor — if → match</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">7 <code>if</code> chains replaced by one flat <code>match first-word</code>. No separate functions — each arm is inline.</p>
+
+        <div class="text-sm mb-3" style="font-family: monospace; white-space: pre; background: #0f172a; padding: 1rem; border-radius: 8px; line-height: 1.5;">
+open       → xdg-open &lt;file&gt;
+cat / read → cat &lt;file&gt;
+ls / list  → ls -la [.]
+run        → &lt;passthrough&gt;
+live-server/server → npx live-server
+add X to Y → printf/sed -i
+search X [in Y] → grep -rn
+_          → Action::PassThrough (→ LLM loop)</div>
+
+        <ul class="text-sm space-y-1">
+            <li>✅ 32 tests covering all 7 tools + edge cases + quoting + case-insensitivity</li>
+            <li>✅ <code>first.to_ascii_lowercase()</code> for case-insensitive matching</li>
+            <li>✅ <code>start server</code> alias handled via wildcard guard arm</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧪 User Integration Tests</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">End-to-end tests that run real shell commands through the full mapper → execute pipeline.</p>
+        <ul class="text-sm space-y-1">
+            <li>✅ <code>test_user_runs_echo</code> — <code>run echo hello</code> → mapper → <code>sh -c "echo hello"</code> → <code>"hello"</code></li>
+            <li>✅ <code>test_user_adds_text_to_file</code> — <code>add hello world to /tmp/...</code> → mapper → <code>printf &gt;&gt;</code> → file verified</li>
+            <li>✅ <code>test_user_dangerous_command_blocked</code> — <code>run sudo rm -rf /</code> → blocked with <code>⛔</code></li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🛡️ Safety & Polish</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>• Dangerous pattern blocking: <code>sudo</code>, <code>npm install -g</code>, <code>chmod +x/777/4755</code>, <code>| bash/sh/zsh/fish</code>, <code>mkfs</code>, <code>dd if=</code>, <code>&gt; /dev/sda</code>, <code>&gt; /dev/nvme</code>, fork bombs, <code>wget -O -</code></li>
+            <li>• <code>force_tool</code> extended with mutation verbs: <code>add</code>, <code>update</code>, <code>edit</code>, <code>change</code>, <code>modify</code>, <code>create</code>, <code>write</code>, <code>make</code> — LLM cannot escape into text response</li>
+            <li>• <code>force_tool: "required"</code> set for command-like inputs</li>
+            <li>• WSL <code>adapt_command()</code> — strips mapper's single-quote wrapping before passing <code>bare</code> path to <code>wslpath -w</code></li>
+            <li>• Commands truncated to 120 chars in terminal display</li>
+            <li>• Confirm-with-timeout step removed — executes immediately; Ctrl+C cancels full generation</li>
+            <li>• Global <code>STOP_SENDER</code> in <code>spinner.rs</code> so <code>run_command</code> stops spinner before execution</li>
+            <li>• Duplicate <code>print!("\r⚡ {}\n")</code> removed from <code>ollama.rs</code> (tools.rs owns display)</li>
+            <li>• System prompt tightened: "NEVER fake a result — always call the tool"</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📊 Test Count</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <div class="text-2xl font-bold green">77 ✅</div>
+        <div class="text-sm text-gray-400 mt-1">32 mapper + 8 apply_patch + 3 user + 8 mode + 10 history + 16 tools</div>
     </div>
 </body>
 </html>

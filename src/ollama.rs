@@ -115,20 +115,53 @@ pub async fn single_turn(
 const SYSTEM_PROMPT: &str = "You MUST use the run_command tool for ANY terminal command, file operation, web request, or system task. NEVER generate fake command output yourself — always call the tool. After the tool returns, briefly summarize the result. For editing files use `sed -i` to edit in place. For opening files use `xdg-open <file>`. NEVER install packages or start servers unless the user explicitly asks. NEVER fake a result — always call the tool. When the user asks to update/create/edit/modify a file, you MUST call run_command to write the file. NEVER just show the new content in your response — write it to the file. Answer within 5 lines in simple layman terms. No jargon.";
 
 fn tool_defs() -> Value {
-    json!([{
-        "type": "function",
-        "function": {
-            "name": "run_command",
-            "description": "Execute any shell command. Use this for creating/editing/deleting files, searching the web, git operations, opening browsers, installing packages, or any system task.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string", "description": "Shell command to execute"}
-                },
-                "required": ["command"]
+    json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "run_command",
+                "description": "Execute any shell command. Use this for creating/editing/deleting files, searching the web, git operations, opening browsers, installing packages, or any system task.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "Shell command to execute"}
+                    },
+                    "required": ["command"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "apply_patch",
+                "description": "Apply surgical edits to a file. Prefer this over run_command with sed/cat for targeted changes. Each operation is applied in order on the same file. If any hunk fails the patch stops with an error message — the model can then retry with corrected hunks.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "description": "Path to the file to patch"},
+                        "operations": {
+                            "type": "array",
+                            "description": "Ordered list of edit operations to apply",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "op": {
+                                        "type": "string",
+                                        "enum": ["search_replace", "delete", "insert_after", "insert_before"],
+                                        "description": "search_replace: find 'old' and replace with 'new'. delete: remove 'old'. insert_after: place 'new' after 'old'. insert_before: place 'new' before 'old'."
+                                    },
+                                    "old": {"type": "string", "description": "Text to find (must exist in file)"},
+                                    "new": {"type": "string", "description": "Replacement or insertion text"}
+                                },
+                                "required": ["op", "old"]
+                            }
+                        }
+                    },
+                    "required": ["file", "operations"]
+                }
             }
         }
-    }])
+    ])
 }
 
 pub fn chat_stream(
@@ -353,6 +386,12 @@ pub fn chat_stream(
                             .and_then(|v| v["command"].as_str().map(|s| s.to_string()))
                             .unwrap_or_default();
                         crate::tools::run_command(&cmd, &perms)
+                    }
+                    "apply_patch" => {
+                        let args: Value = serde_json::from_str(args_json).unwrap_or_default();
+                        let file = args["file"].as_str().unwrap_or("").to_string();
+                        let ops = args["operations"].as_array().cloned().unwrap_or_default();
+                        crate::tools::apply_patch(&file, &ops, &perms)
                     }
                     _ => format!("❌ Unknown tool: {}", name),
                 };

@@ -168,3 +168,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod user_tests {
+    use crate::{mapper, tools, mode::Mode};
+
+    #[test]
+    fn test_user_runs_echo() {
+        let input = "run echo hello";
+        match mapper::map(input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert_eq!(result, "hello");
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+    }
+
+    #[test]
+    fn test_user_adds_text_to_file() {
+        let path = "/tmp/fuchecode_user_test_add.txt";
+        let _ = std::fs::remove_file(path);
+        let input = format!("add hello world to {}", path);
+
+        match mapper::map(&input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert!(result == "✅ Done." || result.contains("hello"));
+                let content = std::fs::read_to_string(path).unwrap_or_default();
+                assert!(content.contains("hello world"));
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_user_dangerous_command_blocked() {
+        let input = "run sudo rm -rf /";
+        match mapper::map(input) {
+            mapper::Action::Execute(cmd) => {
+                let result = tools::run_command(&cmd, &Mode::Build.permissions());
+                assert!(result.starts_with("⛔"), "dangerous command should be blocked: {}", result);
+            }
+            mapper::Action::PassThrough => panic!("Expected Execute, got PassThrough"),
+        }
+    }
+}
