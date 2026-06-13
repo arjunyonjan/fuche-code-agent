@@ -27,6 +27,7 @@ pub async fn handle(input: &str, current_model: &mut String, cfg: &mut Config) -
             rl("  /cd <path>      - Change working directory");
             rl("  /status         - Show system status");
             rl("  /save           - Export conversation to file");
+            rl("  /health        - View/set health biomarkers");
             rl("  exit            - Quit fuchecode");
             rl("");
             Ok(true)
@@ -243,7 +244,42 @@ pub async fn handle(input: &str, current_model: &mut String, cfg: &mut Config) -
             Ok(true)
         }
         "/magic" => {
-            crate::magic::run().await;
+            let api_url = cfg.api_url();
+            let model = current_model.clone();
+            let timeout = cfg.timeout_secs;
+            let greeting = ollama::simple_chat(&api_url, &model, "Greet Tony Stark.", timeout).await;
+            crate::magic::run(greeting).await;
+            Ok(true)
+        }
+        _ if input.starts_with("/health ") => {
+            let rest = &input[8..];
+            let mut parts = rest.splitn(2, ' ');
+            let metric = parts.next().unwrap_or("");
+            let value = parts.next().unwrap_or("").parse::<f64>().ok();
+            let mut bio = crate::magic::BIOMARKERS.lock().unwrap();
+            match metric {
+                "sleep" => { bio.sleep_hours = value.unwrap_or(0.0); rl(&format!("😴 Sleep set to {:.1}h", bio.sleep_hours)); }
+                "water" | "hydration" => { bio.hydration_l = value.unwrap_or(0.0); rl(&format!("💧 Hydration set to {:.1}L", bio.hydration_l)); }
+                "vitd" | "vitamin-d" => { bio.vitamin_d = value.unwrap_or(0.0); rl(&format!("☀️ Vitamin D set to {:.0} ng/mL", bio.vitamin_d)); }
+                "cortisol" => { bio.cortisol = value.unwrap_or(0.0); rl(&format!("🧪 Cortisol set to {:.0} nM", bio.cortisol)); }
+                _ => {
+                    rl("");
+                    rl("📋 Usage:  /health <metric> <value>");
+                    rl("");
+                    rl("  sleep     — hours slept (0-10)");
+                    rl("  water     — hydration in liters (0-4)");
+                    rl("  vitd      — vitamin D ng/mL (0-100)");
+                    rl("  cortisol  — cortisol nM (0-30)");
+                    rl("");
+                    rl("Current:");
+                    rl(&format!("  😴 Sleep:  {:.1}h", bio.sleep_hours));
+                    rl(&format!("  💧 Water:  {:.1}L", bio.hydration_l));
+                    rl(&format!("  ☀️ Vit D:  {:.0} ng/mL", bio.vitamin_d));
+                    rl(&format!("  🧪 Cort:   {:.0} nM", bio.cortisol));
+                    rl("");
+                }
+            }
+            rl("");
             Ok(true)
         }
         _ => Ok(false),

@@ -350,5 +350,230 @@ _          → Action::PassThrough (→ LLM loop)</div>
         <div class="text-2xl font-bold green">77 ✅</div>
         <div class="text-sm text-gray-400 mt-1">32 mapper + 8 apply_patch + 3 user + 8 mode + 10 history + 16 tools</div>
     </div>
+
+    <!-- ====== Jun 13 Round 3 (afternoon) ====== -->
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>✨ /magic Phase 1 — Fullscreen Globe</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ <code>src/magic.rs</code> — new module: fullscreen Ratatui loop, Esc to exit</li>
+            <li>✅ <code>commands.rs</code> — <code>"/magic"</code> arm</li>
+            <li>✅ <code>main.rs</code> — <code>mod magic;</code></li>
+            <li>✅ Color: <code>Cyan</code> → <code>Rgb(0, 230, 200)</code> greenish-aqua</li>
+            <li>✅ Clean rebuild: <code>cargo clean && cargo build --release</code> + <code>~/.bashrc</code> alias fix</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🌍 High-Res Wireframe Globe</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ 11 latitude circles (every 15°, -75° to +75°) × 48 segs each</li>
+            <li>✅ 24 longitude meridians (every 15°) × 32 steps each</li>
+            <li>✅ <strong>1,296 total segments</strong> (up from 312)</li>
+            <li>✅ Aspect ratio corrected: <code>x_half = y_half * w / (2.0 * h)</code> for true circular sphere</li>
+            <li>✅ Back-face dimming: 3-tier (bright / medium / dark) instead of hard cull</li>
+            <li>✅ 30fps (33ms poll), 0.015 rad/frame rotation</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🎯 Filled Shaded Surface Experiment</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ Double-loop over sphere's front face with per-pixel diffuse lighting</li>
+            <li>✅ Light direction: upper-right <code>(-0.4, 0.8, 0.5)</code> with ambient + diffuse</li>
+            <li>✅ Wireframe overlay on top with back-face dimming</li>
+            <li>✅ FPS counter in title bar, updated every 500ms</li>
+            <li>✅ <code>Instant</code> tracking: 500ms rolling window → smooth display</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📊 Engineering Telemetry Sidebar</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ Horizontal split: globe 70% | telemetry 30%</li>
+            <li>✅ <code>nvidia-smi</code> for GPU temperature (45°C on WSL)</li>
+            <li>✅ <code>/proc/stat</code> per-core CPU load (24 cores, delta each 500ms)</li>
+            <li>✅ <strong>Per-core heat map</strong>: 2 rows × 12 cores, color-coded:
+                <ul class="ml-4 mt-1 space-y-1">
+                    <li><span style="color:#00b478">▁▂</span> 0-25% — dark green</li>
+                    <li><span style="color:#64e664">▃▄</span> 25-50% — bright green</li>
+                    <li><span style="color:#ffdc32">▅▆</span> 50-75% — yellow</li>
+                    <li><span style="color:#ff9600">▇</span> 75-90% — orange</li>
+                    <li><span style="color:#ff3232">█</span> 90-100% — red</li>
+                </ul>
+            </li>
+            <li>✅ <strong>Sparkline</strong>: rolling 2-minute aggregate CPU trace via <code>▁▂▃▄▅▆▇█</code>, resized to panel width</li>
+            <li>✅ RAM usage from <code>/proc/meminfo</code> (used/total in GiB)</li>
+            <li>✅ CPU temp probe: /sys/class/thermal — hidden if unavailable (WSL)</li>
+            <li>✅ All telemetry sampled at 500ms, no per-frame overhead</li>
+            <li>✅ <code>ratatui::text::{Line, Span}</code> for styled per-core rendering</li>
+            <li>✅ No new dependencies</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🔲 4 Mini-Panels — GPU · VRAM · CPU · RAM</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ Telemetry sidebar restructured: nested <code>Layout</code> with bordered sub-panels</li>
+            <li>✅ <strong>GPU</strong>: temp + utilization bar via <code>nvidia-smi --query-gpu=temperature.gpu,utilization.gpu</code></li>
+            <li>✅ <strong>VRAM</strong>: used/total + usage bar via <code>nvidia-smi memory.used,memory.total</code></li>
+            <li>✅ <strong>CPU</strong>: temp (<code>--°C</code> on WSL), 24c, freq from <code>/proc/cpuinfo</code>, per-core heat bars + sparkline</li>
+            <li>✅ <strong>RAM</strong>: used/total + usage bar from <code>/proc/meminfo</code></li>
+            <li>✅ <code>block_bar()</code> helper — dynamic-width <code>█</code>/<code>░</code> progress bar</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>💊 /health Command + Biomarkers Panel</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ <code>commands.rs</code> — <code>/health &lt;metric&gt; &lt;value&gt;</code> handler: sleep, water, vitd, cortisol</li>
+            <li>✅ <code>/health</code> with no args shows current values + usage</li>
+            <li>✅ <code>magic.rs</code> — <code>Biomarkers</code> struct + global <code>LazyLock&lt;Mutex&lt;Biomarkers&gt;&gt;</code> shared between modules</li>
+            <li>✅ BIOMARKERS panel below telemetry with 4 biomarker rows + 10-char progress bars</li>
+            <li>✅ Cortisol bar inverted (lower = better)</li>
+            <li>✅ In-memory only, no persistence needed</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧹 Clean Labels — No Icons</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ Telemetry: <code>🔥/⚡/🧠/🌡</code> icons removed → plain text labels (GPU, CPU, RAM)</li>
+            <li>✅ Biomarkers: <code>😴/💧/☀️/🧪</code> icons removed → text labels (Sleep, Water, Vit D, Cort)</li>
+            <li>✅ Cleaner, more readable, consistent look</li>
+        </ul>
+    </div>
+
+    <!-- ====== Recent 50 — Chronological Log ====== -->
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📜 Recent 50 — What We Did, Fixed, Learned</h2>
+            <span class="text-xs text-gray-500">Jun 13 — complete</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">Every change in chronological order, grouped by session phase.</p>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 1 — Mapper Overhaul</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>1. Refactored <code>mapper.rs</code>: 7 <code>if</code>-chains → single flat <code>match first-word</code></li>
+            <li>2. No separate handler functions — each arm is inline, 1–8 lines</li>
+            <li>3. Case-insensitive via <code>first.to_ascii_lowercase()</code></li>
+            <li>4. <code>start server</code> alias via wildcard guard arm</li>
+            <li>5. Added <code>derive(Debug, PartialEq)</code> to <code>Action</code> enum</li>
+            <li>6. Wrote 32 mapper tests covering all 7 tools + edge cases + quoting + apostrophes</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 2 — apply_patch Tool</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>7. Created <code>tools.rs::apply_patch()</code> — native surgical edits, no shell fallback</li>
+            <li>8. 4 operations: <code>search_replace</code>, <code>delete</code>, <code>insert_after</code>, <code>insert_before</code></li>
+            <li>9. Per-hunk error reporting: <code>❌ Hunk 2/4: pattern not found in file.rs</code></li>
+            <li>10. Added as second tool in <code>ollama.rs::tool_defs()</code></li>
+            <li>11. Dispatch handler in <code>chat_stream()</code> tool loop</li>
+            <li>12. 8 unit tests: search_replace, multi_hunk, delete, insert_*, failure, empty, denied</li>
+            <li>13. LLM retries naturally with corrected hunks via existing tool loop</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 3 — User Integration Tests</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>14. <code>test_user_runs_echo</code> — full mapper → execute pipeline</li>
+            <li>15. <code>test_user_adds_text_to_file</code> — <code>printf &gt;&gt;</code> via mapper, file verified on disk</li>
+            <li>16. <code>test_user_dangerous_command_blocked</code> — <code>sudo rm -rf /</code> blocked with <code>⛔</code></li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 4 — Safety & Polish</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>17. Dangerous pattern blocking: <code>sudo</code>, <code>chmod +x/777/4755</code>, <code>| bash/sh</code>, <code>mkfs</code>, <code>dd if=</code>, <code>&gt;/dev/sda</code>, fork bombs, <code>wget -O -</code></li>
+            <li>18. <code>force_tool</code> extended with mutation verbs: <code>add</code>, <code>update</code>, <code>edit</code>, <code>change</code>, <code>modify</code>, <code>create</code>, <code>write</code>, <code>make</code></li>
+            <li>19. WSL <code>adapt_command()</code> — strips single-quote wrapping before <code>wslpath -w</code></li>
+            <li>20. Commands truncated to 120 chars in terminal display</li>
+            <li>21. Global <code>STOP_SENDER</code> in <code>spinner.rs</code> for cross-module cancellation</li>
+            <li>22. System prompt tightened: "NEVER fake a result — always call the tool"</li>
+            <li>23. <code>full replacement (cat &gt;)</code> only as last resort after <code>apply_patch</code> attempts fail</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 5 — /magic Phase 1 Skeleton</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>24. Created <code>src/magic.rs</code> — new module, fullscreen Ratatui loop</li>
+            <li>25. <code>commands.rs</code> — <code>"/magic"</code> arm calling <code>magic::run()</code></li>
+            <li>26. <code>main.rs</code> — <code>mod magic;</code></li>
+            <li>27. Esc exits magic mode, restores normal chat state cleanly</li>
+            <li>28. Color scheme: <code>Cyan</code> → <code>Rgb(0, 230, 200)</code> greenish-aqua throughout</li>
+            <li>29. 30fps rendering with 33ms poll, FPS counter in title bar</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 6 — Shaded Globe</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>30. High-res wireframe: 11 latitude circles × 48 segs + 24 meridians × 32 steps = 1,296 segments</li>
+            <li>31. Aspect-ratio-corrected: <code>x_half = y_half * w / (2.0 * h)</code></li>
+            <li>32. Back-face 3-tier dimming instead of hard cull (bright / medium / dark)</li>
+            <li>33. Filled shaded surface via double-loop over sphere front face</li>
+            <li>34. Per-pixel diffuse lighting from upper-right <code>(-0.4, 0.8, 0.5)</code></li>
+            <li>35. Wireframe overlay on top with back-face dimming</li>
+            <li>36. <code>0.015 rad/frame</code> rotation, <code>Instant</code>-based FPS via 500ms rolling window</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 7 — Engineering Telemetry Sidebar</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>37. Horizontal split: globe 70% | sidebar 30%</li>
+            <li>38. Nested Layout inside TELEMETRY: [GPU+VRAM row (4 lines) | CPU (fill) | RAM (3 lines)]</li>
+            <li>39. GPU panel: temp + utilization bar via <code>nvidia-smi temperature.gpu,utilization.gpu</code></li>
+            <li>40. VRAM panel: used/total + bar via <code>nvidia-smi memory.used,memory.total</code></li>
+            <li>41. CPU panel: temp (<code>--°C</code> on WSL), 24c, freq from <code>/proc/cpuinfo</code></li>
+            <li>42. Per-core heat map: 2 rows × 12 cores, color-coded green→yellow→orange→red</li>
+            <li>43. Aggregate sparkline: up to 120 samples (60s), rendered width-adaptive via <code>▁▂▃▄▅▆▇█</code></li>
+            <li>44. RAM panel: used/total + bar from <code>/proc/meminfo</code></li>
+            <li>45. <code>block_bar()</code> helper — dynamic-width <code>█</code>/<code>░</code> bars</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 8 — Biomarkers Panel</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>46. <code>commands.rs</code> — <code>/health &lt;metric&gt; &lt;value&gt;</code> handler: sleep, water, vitd, cortisol</li>
+            <li>47. <code>Biomarkers</code> struct + <code>LazyLock&lt;Mutex&lt;Biomarkers&gt;&gt;</code> shared between modules</li>
+            <li>48. BIOMARKERS panel below telemetry with 4 rows + 10-char progress bars</li>
+            <li>49. Cortisol bar inverted (lower = better)</li>
+            <li>50. In-memory only, no JSON persistence</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 9 — Cleanup</h2>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>51. Emoji icons removed from telemetry panels — plain text labels only</li>
+            <li>52. Emoji icons removed from biomarker display — text labels only</li>
+            <li>53. <code>dev.html</code> — 9 new cards covering telemetry, panels, biomarkers, heat map, labels</li>
+            <li>54. <code>jarvis.html</code> — /magic vision page with HUD wireframes, phases, feature matrix</li>
+        </ul>
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-500 mt-4 mb-2">┃ Round 10 (now) — Audio + Jarvis Voice</h2>
+        <ul class="text-sm space-y-1">
+            <li>55. Added <code>rodio = "0.19"</code> dependency to <code>Cargo.toml</code></li>
+            <li>56. <code>play_chime()</code> — ascending C5-E5-G5 sine tones played on magic mode entry</li>
+            <li>57. Runs in background thread; silently no-ops if no audio device (WSL safe)</li>
+            <li>58. <code>ollama.rs::simple_chat()</code> — lightweight non-streaming chat call, no tool loop</li>
+            <li>59. Jarvis greeting fetched from LLM on <code>/magic</code> entry: <code>"Greet Tony Stark."</code></li>
+            <li>60. Fallback: <code>"Good morning, sir."</code> if API fails</li>
+            <li>61. Bottom text in magic mode changed from <code>"hello world ⚡"</code> → dynamic Jarvis greeting</li>
+        </ul>
+    </div>
 </body>
 </html>
