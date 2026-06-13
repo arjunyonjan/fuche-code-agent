@@ -7,6 +7,7 @@ mod history;
 mod commands;
 mod tools;
 mod popup;
+mod magic;
 mod mapper;
 
 use std::io::{self, Write};

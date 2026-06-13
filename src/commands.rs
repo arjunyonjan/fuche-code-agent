@@ -242,6 +242,10 @@ pub async fn handle(input: &str, current_model: &mut String, cfg: &mut Config) -
             }
             Ok(true)
         }
+        "/magic" => {
+            crate::magic::run().await;
+            Ok(true)
+        }
         _ => Ok(false),
     }
 }
