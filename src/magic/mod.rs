@@ -40,8 +40,8 @@ pub async fn run() {
         use_powershell,
         child: None,
         stdin: None,
-        volume: 0.5,
-        muted: false,
+        volume: cfg.magic_volume,
+        muted: cfg.magic_muted,
         dragging: false,
         paused: false,
         play_start: Instant::now(),
@@ -77,7 +77,6 @@ pub async fn run() {
     let cpu_cores = 24;
     let mut sparkline = VecDeque::new();
     let mut esc_pressed = false;
-    let mut last_key = String::new();
 
     loop {
         frame_count += 1;
@@ -136,7 +135,7 @@ pub async fn run() {
             .draw(|f| {
                 ui::draw(
                     f, fps, esc_pressed,
-                    &state, &track, &last_key,
+                    &state, &track, "",
                     gpu_temp, gpu_util, gpu_mem_used, gpu_mem_total,
                     ram_used, ram_total,
                     cpu_temp, cpu_freq, cpu_cores, &core_pcts, &sparkline,
@@ -145,18 +144,8 @@ pub async fn run() {
             .ok();
 
         if crossterm::event::poll(Duration::from_millis(33)).ok().unwrap_or(false) {
-            {
-                use std::io::Write;
-                let mut dbg = std::fs::OpenOptions::new().append(true).create(true).open("/tmp/fuche_magic_keys.log").unwrap();
-                let got = crossterm::event::read();
-                if let Ok(crossterm::event::Event::Key(ref k)) = got {
-                    writeln!(dbg, "key: {:?} code:{:?}", k.code, k).ok();
-                } else {
-                    writeln!(dbg, "event: {:?}", got).ok();
-                }
-                if let Ok(ev) = got { match ev {
-                crossterm::event::Event::Key(k) => {
-                    last_key = format!("{:?}", k);
+            match crossterm::event::read() {
+                Ok(crossterm::event::Event::Key(k)) => {
                     match k.code {
                         crossterm::event::KeyCode::Esc if esc_pressed => break,
                         crossterm::event::KeyCode::Esc => esc_pressed = true,
@@ -185,7 +174,7 @@ pub async fn run() {
                         _ => esc_pressed = false,
                     }
                 }
-                crossterm::event::Event::Mouse(m) => {
+                Ok(crossterm::event::Event::Mouse(m)) => {
                     let (term_w, term_h) = crossterm::terminal::size().unwrap_or((80, 24));
                     let vol_row = term_h.saturating_sub(2);
                     let sec_x = (term_w as i16 - 29).max(0) as u16;
@@ -222,7 +211,17 @@ pub async fn run() {
                     }
                 }
                 _ => esc_pressed = false,
-                    }
+            }
+        }
+        // auto-advance when PowerShell child exits (MediaEnded → add_MediaEnded({exit}))
+        if let Ok(mut s) = state.lock() {
+            if s.use_powershell && !s.paused {
+                let ended = s.child.as_mut().and_then(|c| c.try_wait().ok()).flatten().is_some();
+                if ended {
+                    s.child = None;
+                    s.stdin = None;
+                    drop(s);
+                    audio::play_song(&state);
                 }
             }
         }
@@ -238,6 +237,10 @@ pub async fn run() {
         } else if let Some(ref sink) = s.sink {
             sink.stop();
         }
+        let mut cfg = crate::config::Config::load();
+        cfg.magic_volume = s.volume;
+        cfg.magic_muted = s.muted;
+        cfg.save();
     }
 
     crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture).ok();

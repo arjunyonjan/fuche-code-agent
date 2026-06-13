@@ -12,6 +12,9 @@ fn default_magic_audio_dir() -> String {
     "/mnt/c/Users/ACER/Downloads/Music/ACDC".into()
 }
 
+fn default_magic_volume() -> f64 { 0.5 }
+fn default_magic_muted() -> bool { false }
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -23,6 +26,10 @@ pub struct Config {
     pub show_tokens: bool,
     #[serde(default = "default_magic_audio_dir")]
     pub magic_audio_dir: String,
+    #[serde(default = "default_magic_volume")]
+    pub magic_volume: f64,
+    #[serde(default = "default_magic_muted")]
+    pub magic_muted: bool,
 }
 
 impl Default for Config {
@@ -45,6 +52,8 @@ impl Default for Config {
             history_limit: 20,
             show_tokens: true,
             magic_audio_dir: "/mnt/c/Users/ACER/Downloads/Music/ACDC".into(),
+            magic_volume: 0.5,
+            magic_muted: false,
         }
     }
 }

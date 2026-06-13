@@ -154,6 +154,7 @@ pub fn play_idx(state: &Arc<Mutex<AudioState>>, idx: usize) {
         let cmd = format!(
             "Add-Type -AssemblyName PresentationCore; \
              $p = New-Object System.Windows.Media.MediaPlayer; \
+             $p.add_MediaEnded({{exit}}); \
              $p.Open('{}'); $p.Volume = {:.2}; $p.IsMuted = ${}; $p.Play(); \
              while($true){{$l=[Console]::In.ReadLine();if($l-eq$null){{break}}\
              elseif($l-eq'pause'){{$p.Pause()}}elseif($l-eq'play'){{$p.Play()}}\

@@ -119,9 +119,9 @@ pub fn draw(
     f: &mut Frame,
     _fps: u64,
     esc_pressed: bool,
-    state: &Arc<Mutex<AudioState>>,
-    track: &str,
-    last_key: &str,
+    _state: &Arc<Mutex<AudioState>>,
+    _track: &str,
+    _last_key: &str,
     _gpu_temp: f64,
     _gpu_util: f64,
     _gpu_mem_used: f64,
@@ -142,21 +142,5 @@ pub fn draw(
             .style(Style::default().fg(Color::Rgb(255, 200, 0)))
             .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(confirm, f.area());
-        return;
-    }
-
-    if let Ok(s) = state.lock() {
-        let paused = s.paused;
-        let vol = s.volume;
-        let muted = s.muted;
-        let pause_sym = if paused { "⏸" } else { "▶" };
-        let mute_sym = if muted { " 🔇" } else { "" };
-        let display = format!(
-            "♫ {}   {} {}  {:>3.0}%   [key: {}]",
-            track, pause_sym, mute_sym, vol * 100.0, last_key
-        );
-        let top = Paragraph::new(display)
-            .style(Style::default().fg(Color::Rgb(0, 230, 200)));
-        f.render_widget(top, f.area());
     }
 }
