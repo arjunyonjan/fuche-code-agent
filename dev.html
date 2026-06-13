@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUCHECODE · Dev Log</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Google Sans', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; max-width: 800px; margin: auto; padding: 2rem; }
+        .card { background: #1e293b; border-radius: 16px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #334155; }
+        code { background: #0f172a; padding: 2px 6px; border-radius: 6px; font-size: 0.9em; color: #38bdf8; }
+        .tag { display: inline-block; background: #334155; padding: 2px 10px; border-radius: 100px; font-size: 0.75rem; }
+        .green { color: #4ade80; }
+        .red { color: #f87171; }
+        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <h1>🛠 FUCHECODE · Dev Log</h1>
+    <p class="text-sm text-gray-400 mb-6">Sat Jun 13 2026</p>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📋 Project State · Snapshot</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm font-medium mb-2">🎯 Goal</p>
+        <p class="text-sm text-gray-400 mb-4">Rust TUI chat app with streaming, multi-provider support, single-tool calling (<code>run_command</code>), and interactive popup.</p>
+
+        <p class="text-sm font-medium mb-2">⚙️ Constraints</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• Ctrl+C cancels generation mid-stream, does not exit app</li>
+            <li>• Streaming shows tokens character-by-character with 8ms delay</li>
+            <li>• System prompt: "Answer within 5 lines in simple layman terms. No jargon."</li>
+            <li>• All status messages printed from ollama.rs spawned task; spinner runs on stderr in parallel</li>
+            <li>• First token trims leading whitespace to avoid blank gaps</li>
+            <li>• Popup (/) uses crossterm raw mode (↑↓ Enter Esc)</li>
+            <li>• ToolPermission: read/write/execute/network per Mode (BUILD all ✅, PLAN read only)</li>
+            <li>• <code>/cd</code> changes CWD at runtime (all subsequent run_command calls execute from new CWD)</li>
+            <li>• Wallet empty warning (⚠️ Wallet empty) is filtered from display but kept in context for model</li>
+            <li>• SSE comment lines (<code>: heartbeat</code>, <code>: x-clawrouter-debug</code>) are silently skipped</li>
+            <li>• <code>connect_timeout</code> (not <code>timeout</code>) used to avoid killing long streams mid-generation</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">✅ Progress — Done</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• Streaming with real-time token display, Ctrl+C cancellation, spinner on stderr</li>
+            <li>• Single <code>run_command</code> tool replaced all 7 file/search tools</li>
+            <li>• ClawRouter health check on startup — 🟢 active / 🔴 offline in welcome guide</li>
+            <li>• <code>/cd &lt;path&gt;</code> command to change CWD at runtime</li>
+            <li>• <code>/status</code> shows CWD alongside provider/model/timeout</li>
+            <li>• Welcome guide with provider health, CR status, quick start, keyboard shortcuts</li>
+            <li>• Model name displayed in timer line</li>
+            <li>• Wallet warning filtered from user-facing stream</li>
+            <li>• SSE comment lines silently skipped</li>
+            <li>• API errors with object format properly detected and displayed</li>
+            <li>• <code>connect_timeout</code> used instead of <code>timeout</code></li>
+            <li>• Config stores providers as HashMap, <code>default_model = "auto"</code>, <code>current_provider</code> persisted</li>
+            <li>• <code>timeout_secs</code> configurable</li>
+            <li>• ClawRouter port fixed to 8402 in config</li>
+            <li>• Release binary built at <code>target/release/fuchecode</code></li>
+            <li>• <code>.bashrc</code> alias → direct binary path</li>
+            <li>• All 36 tests passing</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">🔑 Key Decisions</p>
+        <ul class="text-sm space-y-1 mb-4">
+            <li>• 7 individual tools → single <code>run_command</code> via <code>sh -c</code>; gated by <code>perms.execute</code> in Build mode only</li>
+            <li>• <code>run_command</code> uses synchronous <code>std::process::Command</code> (not async tokio::process)</li>
+            <li>• <code>connect_timeout</code> instead of <code>timeout</code> so long streams aren't killed</li>
+            <li>• Wallet warning filtered from display but kept in <code>text_content</code> for model context</li>
+            <li>• CR health check only runs when <code>current_provider == "clawrouter"</code></li>
+            <li>• <code>/cd</code> resets CWD for all subsequent <code>run_command</code> calls</li>
+            <li>• <strong>Mapper + single_turn</strong> — deterministic intent matching pre-LLM; LLM only for language, not execution</li>
+        </ul>
+
+        <p class="text-sm font-medium mb-2">📍 Critical Context</p>
+        <ul class="text-sm space-y-1">
+            <li>• <code>run_command</code> is the only callable tool</li>
+            <li>• ClawRouter must be running (<code>npx @blockrun/clawrouter@latest</code>) for CR provider</li>
+            <li>• <code>NVIDIA_API_KEY</code> must be exported in shell for NVIDIA provider</li>
+            <li>• <code>free/deepseek-v4-flash</code> on ClawRouter does <strong>not</strong> support function calling — use <code>auto</code> (→ <code>free/gpt-oss-120b</code>)</li>
+            <li>• Config at <code>~/.fuchecode/config.toml</code></li>
+            <li>• Wallet warning appears when free tier is used on ClawRouter (filtered from display)</li>
+            <li>• <code>/cd</code> changes process CWD</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧠 Hybrid Architecture — Mapper + single_turn</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">Deterministic intent matching before LLM; LLM only for language, not execution.</p>
+
+        <div class="text-sm mb-3" style="font-family: monospace; white-space: pre; background: #0f172a; padding: 1rem; border-radius: 8px; line-height: 1.5;">
+User Input
+    │
+    ├── commands::handle? ──→ /help, /cd, /status etc.
+    │
+    ├── mapper::map(input)?
+    │       │
+    │       ├── matched ──→ tools::run_command(cmd)  ← deterministic, &lt;1ms
+    │       │                    │
+    │       │                    ▼
+    │       │              ollama::single_turn(prompt, result)
+    │       │                    │
+    │       │                    ▼
+    │       │              LLM responds naturally ("Added text...")
+    │       │              (no streaming, no tool loop, no spinner)
+    │       │
+    │       └── unknown ──→ ollama::chat_stream(...)  ← full agentic loop
+    │                            (streaming + tools + spinner)
+    │                            (Q&A / complex intents)
+    │
+    ▼
+User sees response</div>
+
+        <h2>📋 Mapped Intents</h2>
+        <table class="w-full text-sm">
+            <tr><td class="py-1"><code>open &lt;file&gt;</code></td><td class="text-right">→ <code>xdg-open &lt;file&gt;</code></td></tr>
+            <tr><td class="py-1"><code>add &lt;text&gt; to &lt;file&gt;</code></td><td class="text-right">→ <code>printf '...' &gt;&gt; &lt;file&gt;</code></td></tr>
+            <tr><td class="py-1"><code>cat / read &lt;file&gt;</code></td><td class="text-right">→ <code>cat &lt;file&gt;</code></td></tr>
+            <tr><td class="py-1"><code>ls / list [path]</code></td><td class="text-right">→ <code>ls -la [path]</code></td></tr>
+            <tr><td class="py-1"><code>search &lt;pat&gt; [in path]</code></td><td class="text-right">→ <code>grep -rn 'pat' [path]</code></td></tr>
+            <tr><td class="py-1"><code>run &lt;cmd&gt;</code></td><td class="text-right">→ <code>&lt;cmd&gt;</code> (passthrough)</td></tr>
+            <tr><td class="py-1"><code>live-server</code></td><td class="text-right">→ <code>npx live-server</code></td></tr>
+            <tr><td class="py-1">anything else</td><td class="text-right">→ LLM agentic loop</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🩺 ClawRouter Health Check</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <div class="mb-3"><span class="tag green">LIVE ✅</span></div>
+        <ul class="text-sm space-y-1">
+            <li>✅ <code>ollama.rs</code> — added <code>check_cr_status()</code> (2s connect_timeout)</li>
+            <li>✅ <code>ui.rs</code> — <code>show_guide()</code> now shows <span class="green">🟢 active</span> / <span class="red">🔴 offline</span></li>
+            <li>✅ <code>main.rs</code> — health check on startup (only if provider is clawrouter)</li>
+            <li>✅ <code>commands.rs</code> — re-checks health on <code>/provider clawrouter</code></li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📂 /cd Command</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ <code>commands.rs</code> — added <code>/cd &lt;path&gt;</code> and <code>/cd</code> (show current)</li>
+            <li>✅ <code>run_command</code> now executes from the new CWD</li>
+            <li>✅ <code>/status</code> shows current CWD</li>
+            <li>✅ Added to popup and help</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>⚙️ Alias Fix</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>🔄 <code>~/.bashrc</code> — changed from <code>cd && cargo run</code> → direct binary</li>
+            <li>✅ <code>pwd</code> now shows the directory you launched from, not fuchecode dir</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧰 Tool Architecture — Single Tool</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">Replaced 7 individual tools with 1 universal tool.</p>
+
+        <div class="mb-3">
+            <span class="tag green">BUILD ✅</span>
+            <span class="tag ml-2">PLAN ❌</span>
+        </div>
+
+        <p class="text-sm mb-2"><strong>Before:</strong> <code>search_web</code>, <code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>delete_file</code>, <code>list_dir</code>, <code>search_content</code></p>
+        <p class="text-sm mb-4"><strong>After:</strong> <code>run_command</code> — one tool to rule them all</p>
+
+        <h2>📐 How It Works</h2>
+        <ul class="text-sm space-y-2">
+            <li>1. Model calls <code>run_command</code> with a shell command</li>
+            <li>2. <code>tools.rs:run_command()</code> executes via <code>sh -c "..."</code></li>
+            <li>3. Captures stdout + stderr, returns result to model</li>
+            <li>4. Gated by <code>perms.execute</code> — only in <span class="green">Build</span> mode</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>⚡ What run_command Covers</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+            <div><code>cat</code> — read files</div>
+            <div><code>echo</code> / <code>tee</code> — write files</div>
+            <div><code>sed</code> — edit files</div>
+            <div><code>rm</code> — delete files</div>
+            <div><code>ls</code> — list dir</div>
+            <div><code>grep</code> — search content</div>
+            <div><code>mkdir</code> — create dirs</div>
+            <div><code>mv</code> / <code>cp</code> — move/copy</div>
+            <div><code>git</code> — version control</div>
+            <div><code>curl</code> — web requests</div>
+            <div><code>xdg-open</code> — open browser</div>
+            <div><code>npm</code> / <code>cargo</code> — packages</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🧹 Cleanup</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <ul class="text-sm space-y-1">
+            <li>✅ Removed <code>search_web</code> from <code>tools.rs</code></li>
+            <li>✅ Stripped <code>tool_defs()</code> in <code>ollama.rs</code> — only <code>run_command</code></li>
+            <li>✅ Tool execution loop simplified to single match arm</li>
+            <li>⬜ Optional: remove <code>reqwest</code>, <code>futures_util</code> deps later</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>📡 single_turn</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <p class="text-sm text-gray-400 mb-3">Non-streaming, no-tools LLM call used after mapper execution.</p>
+        <ul class="text-sm space-y-2">
+            <li>1. Mapper executes command deterministically → <code>result</code></li>
+            <li>2. <code>ollama::single_turn()</code> POSTS <code>{"stream": false}</code> with prompt + fake tool call + result</li>
+            <li>3. LLM thinks it called <code>run_command</code> and got the result — responds in natural language</li>
+            <li>4. No streaming, no tool loop, no spinner — <strong>~500ms</strong> typical</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start mb-2">
+            <h2>🔐 Permission Model</h2>
+            <span class="text-xs text-gray-500">Jun 13</span>
+        </div>
+        <table class="w-full text-sm">
+            <tr><td class="py-1">Build</td><td class="text-right green">execute: true ✅</td></tr>
+            <tr><td class="py-1">Plan</td><td class="text-right red">execute: false ❌</td></tr>
+        </table>
+    </div>
+</body>
+</html>

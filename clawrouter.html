@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawRouter + FUCHECODE · Dual Provider Setup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-border { position: relative; }
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            padding: 1px;
+            background: linear-gradient(135deg, #6366f1, #06b6d4, #6366f1);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 min-h-screen">
+
+<div class="max-w-3xl mx-auto px-4 py-12">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-400 to-cyan-500 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-indigo-500/30">⚡</div>
+        <div>
+            <h1 class="text-2xl font-bold text-white">ClawRouter + FUCHECODE</h1>
+            <p class="text-sm text-slate-400">Dual provider · 11 free cloud models + local Ollama 480B</p>
+        </div>
+        <div class="ml-auto">
+            <span class="text-xs font-medium px-3 py-1.5 rounded-full bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">v1.0</span>
+        </div>
+    </div>
+
+    <!-- Pipeline overview -->
+    <div class="gradient-border bg-slate-800/50 rounded-xl p-5 mb-6 backdrop-blur-sm">
+        <div class="flex items-center gap-2">
+            <span class="text-sm">🧠</span>
+            <p class="text-sm text-slate-300 font-medium">ClawRouter → FUCHECODE pipeline: <span class="text-cyan-300">Start ClawRouter (port 8402)</span> <span class="text-slate-500">→</span> <span class="text-indigo-300">point api_url to it</span> <span class="text-slate-500">→</span> <span class="text-emerald-300">set default_model = blockrun/free</span> <span class="text-slate-500">→</span> <span class="text-yellow-300">/model toggles cloud ↔ local</span></p>
+        </div>
+    </div>
+
+    <!-- How to start ClawRouter -->
+    <div class="bg-slate-800/50 rounded-xl shadow-sm border border-slate-700 overflow-hidden mb-6 backdrop-blur-sm">
+        <div class="border-b border-slate-700 px-6 py-4 bg-gradient-to-r from-indigo-900/30 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">🚀</span>
+                <span class="font-semibold text-white">Start ClawRouter — 3 ways</span>
+                <span class="text-xs text-slate-500 ml-auto">port 8402</span>
+            </div>
+        </div>
+        <div class="p-6 space-y-4">
+
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="w-5 h-5 rounded bg-emerald-900/50 flex items-center justify-center text-xs font-bold text-emerald-400">1</span>
+                    <span class="text-sm font-medium text-slate-200">One-shot <span class="text-xs text-slate-500 font-normal">(recommended)</span></span>
+                </div>
+                <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-slate-200 overflow-x-auto shadow-inner border border-slate-700">
+                    <div><span class="text-green-400">npx</span> @blockrun/clawrouter@latest</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="w-5 h-5 rounded bg-amber-900/50 flex items-center justify-center text-xs font-bold text-amber-400">2</span>
+                    <span class="text-sm font-medium text-slate-200">Background <span class="text-xs text-slate-500 font-normal">(survives terminal close)</span></span>
+                </div>
+                <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-slate-200 overflow-x-auto shadow-inner border border-slate-700">
+                    <div><span class="text-blue-300">nohup</span> <span class="text-green-400">npx</span> @blockrun/clawrouter@latest > /dev/null 2>&1 <span class="text-blue-300">&</span></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="w-5 h-5 rounded bg-cyan-900/50 flex items-center justify-center text-xs font-bold text-cyan-400">3</span>
+                    <span class="text-sm font-medium text-slate-200">Custom port</span>
+                </div>
+                <div class="bg-slate-900 rounded-lg p-3 font-mono text-sm text-slate-200 overflow-x-auto shadow-inner border border-slate-700">
+                    <div><span class="text-green-400">npx</span> @blockrun/clawrouter@latest <span class="text-amber-300">--port</span> 8402</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- FUCHECODE config -->
+    <div class="bg-slate-800/50 rounded-xl shadow-sm border border-slate-700 overflow-hidden mb-6 backdrop-blur-sm">
+        <div class="border-b border-slate-700 px-6 py-4 bg-gradient-to-r from-cyan-900/30 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">⚙️</span>
+                <span class="font-semibold text-white">FUCHECODE config</span>
+                <span class="text-xs text-slate-500 ml-auto">~/.fuchecode/config.toml</span>
+            </div>
+        </div>
+        <div class="p-6">
+            <div class="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-200 overflow-x-auto shadow-inner border border-slate-700">
+                <div><span class="text-slate-500"># ClawRouter (cloud — default)</span></div>
+                <div><span class="text-cyan-300">default_model</span> = <span class="text-green-300">"blockrun/free"</span></div>
+                <div><span class="text-cyan-300">api_url</span> = <span class="text-green-300">"http://127.0.0.1:8402/v1/chat/completions"</span></div>
+                <div class="mt-3"><span class="text-slate-500"># Ollama (local — toggle with /model)</span></div>
+                <div><span class="text-slate-500"># default_model = "qwen3-coder:480b-cloud"</span></div>
+                <div><span class="text-slate-500"># api_url = "http://127.0.0.1:11434/api/chat"</span></div>
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+                <span class="text-xs px-2 py-1 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">/model blockrun/free</span>
+                <span class="text-slate-600 text-xs">↔</span>
+                <span class="text-xs px-2 py-1 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">/model qwen3-coder:480b-cloud</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ClawRouter details -->
+    <div class="bg-slate-800/50 rounded-xl shadow-sm border border-slate-700 overflow-hidden mb-6 backdrop-blur-sm">
+        <div class="border-b border-slate-700 px-6 py-4 bg-gradient-to-r from-purple-900/30 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">📋</span>
+                <span class="font-semibold text-white">ClawRouter details</span>
+            </div>
+        </div>
+        <div class="p-5 text-sm text-slate-400 space-y-2">
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">URL:</span>
+                <span><code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">http://127.0.0.1:8402/v1/chat/completions</code></span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">Models:</span>
+                <span><code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">auto</code>, <code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">eco</code>, <code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">premium</code> + <code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">blockrun/free</code></span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">Pricing:</span>
+                <span>Free tier — 11 NVIDIA models, $0.00 balance</span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">Wallet:</span>
+                <span>Auto-generated at <code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">~/.openclaw/blockrun/</code></span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">API keys:</span>
+                <span>None required on free tier</span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-cyan-400 shrink-0">Health:</span>
+                <span><code class="text-slate-200 bg-slate-900 px-1.5 py-0.5 rounded text-xs font-mono">curl http://127.0.0.1:8402/v1/models</code></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- One-liner -->
+    <div class="gradient-border bg-slate-800/50 rounded-xl p-5 backdrop-blur-sm">
+        <div class="flex items-center gap-2">
+            <span class="text-sm">🚀</span>
+            <p class="text-sm text-slate-300 font-medium"><span class="text-cyan-300">npx @blockrun/clawrouter@latest</span> — that's it. No config, no API keys, 11 free models.</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-8 text-xs text-slate-600">
+        FUCHECODE · ClawRouter bridge · v1.0 · 🔥✅🚀
+    </div>
+
+</div>
+
+</body>
+</html>

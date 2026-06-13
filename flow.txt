@@ -1,0 +1,56 @@
+FUCHECODE Streaming Flow
+=========================
+
+┌─ User types "say hi" ──────────────────────┐
+│                                             │
+│  read_line() → input.trim()                 │
+│       ↓                                     │
+│  commands::handle() ← not a command         │
+│       ↓                                     │
+│  bot_prefix_with_mode() → "├─[BUILD]\n│ "  │
+│       ↓                                     │
+│  print_timer_start() → spinner::start()     │
+│       ↓                                     │
+│  ollama::chat_stream(url, model, prompt)    │
+│       ↓                                     │
+│  ┌─ spawned task ────────────────────────┐  │
+│  │ POST {stream:true}                    │  │
+│  │   ↓                                   │  │
+│  │ bytes_stream() → SSE parse            │  │
+│  │   ↓                                   │  │
+│  │ tx.send("Hel") ─┐                     │  │
+│  │ tx.send("lo")   │ channel             │  │
+│  │ tx.send("!")    │                     │  │
+│  │   ↓             │                     │  │
+│  │ eprint!("💭 Xms") → to stderr         │  │
+│  └─────────────────│─────────────────────┘  │
+│                    ↓                        │
+│  main.rs: select! { rx.recv(), ctrl_c }     │
+│       ↓                                     │
+│  First token? → stop spinner, print "💭 Xms"│
+│       ↓                                     │
+│  print!("{}", token.bright_green()) → stdout│
+│       ↓ ... repeat ...                      │
+│  rx closed → break loop                     │
+│       ↓                                     │
+│  history::save(prompt, full_response)        │
+│       ↓                                     │
+│  println!("└───┘")                          │
+│       ↓                                     │
+│  ┌─[BUILD] │ ← back to prompt               │
+└─────────────────────────────────────────────┘
+
+Ctrl+C path (during streaming):
+
+  tokio::signal::ctrl_c() fires → break loop
+       ↓
+  timer stopped, cancelled message
+       ↓
+  back to prompt (app keeps running)
+
+NVIDIA Direct Streaming — Key Takeaways
+=========================================
+- Config: ~/.fuchecode/config.toml → NVIDIA endpoint
+- Key: NVIDIA_API_KEY in ~/.bashrc — source ~/.bashrc or new terminal
+- Streaming: tokens flow in real-time, spinner → timer → green text
+- Ctrl+C: cancels mid-generation, app stays running

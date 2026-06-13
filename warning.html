@@ -31,7 +31,7 @@
         <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-orange-200">⚠️</div>
         <div>
             <h1 class="text-2xl font-bold text-slate-800">FucheCode TUI · Rust Dev Log · WSL Fix</h1>
-            <p class="text-sm text-slate-500">Rust TUI · Ollama + WSL Bridge · 10 modules · 5 bug fix rounds</p>
+            <p class="text-sm text-slate-500">Rust TUI · Ollama + WSL Bridge · 10 modules · 3 bug fix rounds · 26 tests</p>
         </div>
         <div class="ml-auto">
             <span class="text-xs font-medium px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200/50">trending</span>
@@ -181,9 +181,136 @@
         </div>
     </div>
 
+    <!-- Robustness Testing -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+        <div class="border-b border-slate-100 px-6 py-4 bg-gradient-to-r from-rose-50 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">🛡️</span>
+                <span class="font-semibold text-slate-800">Robustness Testing — Round 3</span>
+                <span class="text-xs text-slate-400 ml-auto">Jun 12, 2026 · 8:21 PM NPT · 6 fixes</span>
+            </div>
+        </div>
+        <div class="p-5 space-y-4 text-sm">
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">1.</span>
+                <div><span class="font-medium text-slate-800">17 clippy warnings → zero</span><br><span class="text-slate-600">Collapsible if/let chains, 8 needless returns, useless <code class="bg-slate-100 px-1 rounded text-xs">format!</code>, redundant <code class="bg-slate-100 px-1 rounded text-xs">use reqwest</code>, collapsible match, <code class="bg-slate-100 px-1 rounded text-xs">lines().filter_map(Result::ok)</code> → <code class="bg-slate-100 px-1 rounded text-xs">map_while</code>, <code class="bg-slate-100 px-1 rounded text-xs">entry.to_string()</code> in <code class="bg-slate-100 px-1 rounded text-xs">writeln!</code>. All cleaned.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">Like cleaning your room — messy code is harder to fix later and might hide real bugs under the clutter.</span></span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">2.</span>
+                <div><span class="font-medium text-slate-800">13 unwrap() calls hardened</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">.unwrap()</code> replaced with <code class="bg-slate-100 px-1 rounded text-xs">expect()</code>, <code class="bg-slate-100 px-1 rounded text-xs">unwrap_or()</code>, <code class="bg-slate-100 px-1 rounded text-xs">if let Some</code>, or silent <code class="bg-slate-100 px-1 rounded text-xs">let _ =</code> across history.rs, config.rs, tools.rs, ollama.rs, ui.rs, commands.rs. No more panics from <code class="bg-slate-100 px-1 rounded text-xs">file_name()</code>, <code class="bg-slate-100 px-1 rounded text-xs">home_dir()</code>, or <code class="bg-slate-100 px-1 rounded text-xs">flush()</code>.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">Like grabbing a hot pan without a mitt — <code class="bg-slate-100 px-1 rounded text-xs">.unwrap()</code> burns the whole program if something goes wrong. Now we catch gently.</span></span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">3.</span>
+                <div><span class="font-medium text-slate-800">Config save creates parent dirs</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">config.rs</code> now calls <code class="bg-slate-100 px-1 rounded text-xs">fs::create_dir_all()</code> before writing <code class="bg-slate-100 px-1 rounded text-xs">config.toml</code>. Serialization and write failures handled gracefully instead of panicking.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">Like making sure a folder exists before stuffing a paper in it — otherwise the paper just falls on the floor.</span></span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">4.</span>
+                <div><span class="font-medium text-slate-800">History I/O never panics</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">save()</code> silently drops writes on I/O error. <code class="bg-slate-100 px-1 rounded text-xs">load_last()</code> returns empty vec on any read failure. Corrupted JSONL lines are skipped instead of crashing.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">If your diary has a torn page, you don't throw away the whole book — you just skip the torn part and keep reading.</span></span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">5.</span>
+                <div><span class="font-medium text-slate-800">26 unit tests added</span><br><span class="text-slate-600">Mode: toggle cycle, build/plan writes, name, display, equality (8). Tools: missing file, empty file, invalid dir, special chars, search match/no match, write success/failure (12). History: JSONL roundtrip, corrupted lines, empty file, last-n filter, missing file (6). All pass.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">Like trying on shoes before buying — we checked every button and lever works so you don't find out later it's broken.</span></span></div>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-red-500 shrink-0 mt-0.5">6.</span>
+                <div><span class="font-medium text-slate-800">Edge case coverage</span><br><span class="text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">search_content("")</code> matches everything. <code class="bg-slate-100 px-1 rounded text-xs">list_dir("")</code> defaults to <code class="bg-slate-100 px-1 rounded text-xs">.</code>. Files with spaces/special chars handled. Invalid paths return <code class="bg-slate-100 px-1 rounded text-xs">"Not found"</code> / <code class="bg-slate-100 px-1 rounded text-xs">"Error: ..."</code> instead of crashing.</span><br><span class="text-xs text-amber-500">🧒 <span class="text-slate-400">Like teaching someone to handle a weird-shaped ball — if it's square or has spikes, you still catch it instead of running away.</span></span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 40 Issues Session Log -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+        <div class="border-b border-slate-100 px-6 py-4 bg-gradient-to-r from-indigo-50 to-transparent">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">📋</span>
+                <span class="font-semibold text-slate-800">Full Session Log — 40 Issues & Resolutions</span>
+                <span class="text-xs text-slate-400 ml-auto">Jun 12, 2026 · clean compile</span>
+            </div>
+        </div>
+        <div class="p-5 space-y-5 text-sm">
+
+            <!-- Setup & Environment -->
+            <div>
+                <div class="font-semibold text-slate-700 mb-2 flex items-center gap-2"><span class="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">1</span>Setup & Environment <span class="text-xs text-slate-400 font-normal">(1–10)</span></div>
+                <div class="space-y-1.5 ml-7">
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">1.</span><div><span class="font-medium text-slate-800">Rust not installed</span> → <code class="bg-slate-100 px-1 rounded text-xs">winget install Rustlang.Rustup</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">2.</span><div><span class="font-medium text-slate-800">link.exe not found</span> → Switched to WSL</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">3.</span><div><span class="font-medium text-slate-800">WSL not installed</span> → <code class="bg-slate-100 px-1 rounded text-xs">wsl --install</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">4.</span><div><span class="font-medium text-slate-800">Ollama connection refused (127.0.0.1)</span> → Used Windows IP <code class="bg-slate-100 px-1 rounded text-xs">172.23.240.1</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">5.</span><div><span class="font-medium text-slate-800">Connection timed out</span> → Bound Ollama to <code class="bg-slate-100 px-1 rounded text-xs">0.0.0.0</code> in PowerShell</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">6.</span><div><span class="font-medium text-slate-800">ClawRouter not found</span> → Installed via <code class="bg-slate-100 px-1 rounded text-xs">npx @blockrun/clawrouter@latest</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">7.</span><div><span class="font-medium text-slate-800">Systemd not running in WSL</span> → Manual <code class="bg-slate-100 px-1 rounded text-xs">ollama serve &</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">8.</span><div><span class="font-medium text-slate-800">GPU not detected</span> → Restarted Ollama, RTX 5060 found</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">9.</span><div><span class="font-medium text-slate-800">Model pull stuck</span> → Waited for serve to start first</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">10.</span><div><span class="font-medium text-slate-800">qwen3-coder:480b-cloud not showing</span> → Pulled successfully, verified with <code class="bg-slate-100 px-1 rounded text-xs">/api/tags</code></div></div>
+                </div>
+            </div>
+
+            <!-- Code & Compilation -->
+            <div>
+                <div class="font-semibold text-slate-700 mb-2 flex items-center gap-2"><span class="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">2</span>Code & Compilation <span class="text-xs text-slate-400 font-normal">(11–20)</span></div>
+                <div class="space-y-1.5 ml-7">
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">11.</span><div><span class="font-medium text-slate-800">ollama_url vs api_url mismatch</span> → Renamed across config, main, and TOML</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">12.</span><div><span class="font-medium text-slate-800">chat_with_mode not found</span> → Removed unused mode parameter</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">13.</span><div><span class="font-medium text-slate-800">Header missing mode argument</span> → Added <code class="bg-slate-100 px-1 rounded text-xs">&current_mode</code> parameter</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">14.</span><div><span class="font-medium text-slate-800">Duplicate sed replacements</span> → Rewrote files clean instead</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">15.</span><div><span class="font-medium text-slate-800">Unused import crate::tools</span> → Removed from ollama.rs</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">16.</span><div><span class="font-medium text-slate-800">Dead code writes_allowed</span> → Kept for future use</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">17.</span><div><span class="font-medium text-slate-800">Mode enum not imported</span> → Added to main.rs</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">18.</span><div><span class="font-medium text-slate-800">config.toml not found</span> → Created in <code class="bg-slate-100 px-1 rounded text-xs">~/.fuchecode/</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">19.</span><div><span class="font-medium text-slate-800">TOML parsing error</span> → Used serde derives correctly</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">20.</span><div><span class="font-medium text-slate-800">Build after multiple sed fails</span> → Started fresh with clean files</div></div>
+                </div>
+            </div>
+
+            <!-- ClawRouter Integration -->
+            <div>
+                <div class="font-semibold text-slate-700 mb-2 flex items-center gap-2"><span class="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">3</span>ClawRouter Integration <span class="text-xs text-slate-400 font-normal">(21–30)</span></div>
+                <div class="space-y-1.5 ml-7">
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">21.</span><div><span class="font-medium text-slate-800">ClawRouter OpenAI format incompatible</span> → Added adapter in ollama.rs</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">22.</span><div><span class="font-medium text-slate-800">Response parsing wrong</span> → Used <code class="bg-slate-100 px-1 rounded text-xs">choices[0].message.content</code> for ClawRouter</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">23.</span><div><span class="font-medium text-slate-800">Wallet generation unclear</span> → Showed backup location <code class="bg-slate-100 px-1 rounded text-xs">~/.openclaw/blockrun/</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">24.</span><div><span class="font-medium text-slate-800">Free tier not working</span> → Confirmed 11 NVIDIA models at $0</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">25.</span><div><span class="font-medium text-slate-800">Crypto required?</span> → No, free tier works without funding</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">26.</span><div><span class="font-medium text-slate-800">/model not switching URL</span> → Implemented dynamic endpoint switching</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">27.</span><div><span class="font-medium text-slate-800">ClawRouter not auto-starting</span> → Added <code class="bg-slate-100 px-1 rounded text-xs">&</code> to background process</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">28.</span><div><span class="font-medium text-slate-800">Port conflict (8402 vs 3100)</span> → Used default 8402 from docs</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">29.</span><div><span class="font-medium text-slate-800">Health check failing</span> → Used <code class="bg-slate-100 px-1 rounded text-xs">/v1/models</code> endpoint</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">30.</span><div><span class="font-medium text-slate-800">Rate limits unknown</span> → Confirmed unlimited on free tier</div></div>
+                </div>
+            </div>
+
+            <!-- UI & Modes -->
+            <div>
+                <div class="font-semibold text-slate-700 mb-2 flex items-center gap-2"><span class="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">4</span>UI & Modes <span class="text-xs text-slate-400 font-normal">(31–40)</span></div>
+                <div class="space-y-1.5 ml-7">
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">31.</span><div><span class="font-medium text-slate-800">Tab key not detected</span> → Replaced with <code class="bg-slate-100 px-1 rounded text-xs">/mode</code> command</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">32.</span><div><span class="font-medium text-slate-800">BUILD/PLAN colors not showing</span> → Added color codes in ui.rs</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">33.</span><div><span class="font-medium text-slate-800">Mode not persisting</span> → Stored in <code class="bg-slate-100 px-1 rounded text-xs">current_mode</code> variable</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">34.</span><div><span class="font-medium text-slate-800">Header not updating on mode switch</span> → Redraw UI with <code class="bg-slate-100 px-1 rounded text-xs">print!("\x1B[2J")</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">35.</span><div><span class="font-medium text-slate-800">Prompt prefix wrong</span> → Used <code class="bg-slate-100 px-1 rounded text-xs">user_prompt_with_mode()</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">36.</span><div><span class="font-medium text-slate-800">Bot prefix not colored</span> → Added <code class="bg-slate-100 px-1 rounded text-xs">bot_prefix_with_mode()</code></div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">37.</span><div><span class="font-medium text-slate-800">Mode toggle not working</span> → Implemented <code class="bg-slate-100 px-1 rounded text-xs">Mode::toggle()</code> method</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">38.</span><div><span class="font-medium text-slate-800">Mode state lost on /model</span> → Preserved mode separately</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">39.</span><div><span class="font-medium text-slate-800">No visual feedback on mode</span> → Added 🔵 BUILD / 🟠 PLAN in header</div></div>
+                    <div class="flex gap-2"><span class="text-red-500 shrink-0">40.</span><div><span class="font-medium text-slate-800">Compile warnings after all changes</span> → Clean build, 0 errors</div></div>
+                </div>
+            </div>
+
+            <!-- One-liner -->
+            <div class="bg-gradient-to-r from-indigo-50 to-transparent -mx-5 -mb-5 px-5 py-4 rounded-b-xl border-t border-indigo-100">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm">🔥</span>
+                    <p class="text-sm text-slate-700 font-medium"><span class="text-indigo-600">40 issues → 0 remaining.</span> Ollama + ClawRouter dual-mode, BUILD/PLAN UI, RTX 5060, clean compile. <span class="text-xs text-slate-400">🔥✅🚀</span></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- Footer -->
     <div class="text-center mt-8 text-xs text-slate-400">
-        🔧 fuchecode · wsl + windows bridge · v1.0
+        🔧 fuchecode · wsl + windows bridge · v1.0 · 🛡️ 26 tests · 0 clippy · 0 unwrap panics
     </div>
 
 </div>

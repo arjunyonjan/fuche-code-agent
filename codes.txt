@@ -1,0 +1,1099 @@
+=== FUCHECODE Source Dump === 2026-06-12 20:15:15 ===
+=== src/commands.rs ===
+use std::io::{self, Write};
+use colored::*;
+use crate::history;
+use crate::ui;
+use crate::ollama;
+
+fn rl(s: &str) {
+    print!("\r{}\n", s);
+    let _ = io::stdout().flush();
+}
+
+pub async fn handle(input: &str, current_model: &mut String) -> Result<bool, Box<dyn std::error::Error>> {
+    match input {
+        "/help" => {
+            rl("");
+            rl("📚 FUCHECODE Commands");
+            rl("");
+            rl("  /help           - Show this help");
+            rl("  /model          - Show current model");
+            rl("  /model <name>   - Switch model");
+            rl("  /models         - List & select from Ollama models");
+            rl("  /history        - Show last 10 messages");
+            rl("  /clear          - Clear conversation history");
+            rl("  /status         - Show system status");
+            rl("  /save           - Export conversation to file");
+            rl("  exit            - Quit fuchecode");
+            rl("");
+            Ok(true)
+        }
+        "/status" => {
+            let history_count = history::load_last(9999).len();
+            rl("");
+            rl("📊 Status:");
+            rl(&format!("  Model: {}", current_model));
+            rl("  Ollama: Connected");
+            rl(&format!("  History: {} messages", history_count));
+            rl("  Config: ~/.fuchecode/config.toml");
+            rl("");
+            Ok(true)
+        }
+        "/save" => {
+            let history = history::load_last(9999);
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs();
+            let filename = format!("/home/arjun/fuchecode_export_{}.md", timestamp);
+            let mut content = String::from("# FUCHECODE Conversation Export\n\n");
+            for msg in history {
+                let role = msg["role"].as_str().unwrap_or("");
+                let text = msg["content"].as_str().unwrap_or("");
+                if role == "user" {
+                    content.push_str(&format!("## 👤 User\n{}\n\n", text));
+                } else if role == "assistant" {
+                    content.push_str(&format!("## 🤖 Assistant\n{}\n\n", text));
+                }
+            }
+            std::fs::write(&filename, content)?;
+            rl("");
+            rl(&format!("💾 Exported to: {}", filename));
+            rl("");
+            Ok(true)
+        }
+        "/history" => {
+            rl("");
+            rl("📜 Last 10 messages:");
+            for msg in history::load_last(10) {
+                let role = msg["role"].as_str().unwrap_or("");
+                let content = msg["content"].as_str().unwrap_or("");
+                if role == "user" {
+                    rl(&format!("  🧑 You: {}", content));
+                } else if role == "assistant" {
+                    rl(&format!("  🤖 AI: {}", content));
+                }
+            }
+            rl("");
+            Ok(true)
+        }
+        "/clear" => {
+            history::clear();
+            rl("");
+            rl("🗑️ History cleared.");
+            rl("");
+            Ok(true)
+        }
+        _ if input.starts_with("/model ") => {
+            let new_model = &input[7..];
+            if !new_model.is_empty() {
+                *current_model = new_model.to_string();
+                rl(&format!("✅ Switched to: {}", current_model));
+                rl("");
+                print!("\x1B[2J\x1B[1;1H");
+                ui::header(current_model);
+            }
+            Ok(true)
+        }
+        "/model" => {
+            rl(&format!("📌 Current model: {}", current_model));
+            rl("");
+            Ok(true)
+        }
+        "/models" => {
+            rl("");
+            rl("📋 Fetching available models...");
+            match ollama::list_models().await {
+                Ok(models) => {
+                    if models.is_empty() {
+                        rl("  No models found.");
+                        rl("");
+                        return Ok(true);
+                    }
+                    rl("");
+                    rl(&format!("{}", "┌─ Models ───────────────────────────────────┐".cyan()));
+                    for (i, name) in models.iter().enumerate() {
+                        rl(&format!("│ {:<3} {}  │", format!("{}.", i + 1).bright_green(), name));
+                    }
+                    rl(&format!("{}", "└────────────────────────────────────────────┘".cyan()));
+                    rl("");
+
+                    rl("Enter model number to switch, or 0 to cancel:");
+                    rl("");
+                    ui::user_prompt_with_mode(&crate::mode::Mode::Build);
+
+                    let mut sel = String::new();
+                    io::stdin().read_line(&mut sel)?;
+                    let sel = sel.trim();
+
+                    if let Ok(n) = sel.parse::<usize>() {
+                        if n > 0 && n <= models.len() {
+                            let chosen = &models[n - 1];
+                            *current_model = chosen.clone();
+                            rl(&format!("✅ Switched to: {}", current_model));
+                            rl("");
+                            print!("\x1B[2J\x1B[1;1H");
+                            ui::header(current_model);
+                        } else if n == 0 {
+                            rl("Canceled.");
+                            rl("");
+                        } else {
+                            rl("Invalid selection.");
+                            rl("");
+                        }
+                    } else {
+                        rl("Invalid input.");
+                        rl("");
+                    }
+                }
+                Err(e) => {
+                    rl(&format!("❌ Failed to fetch models: {}", e));
+                    rl("");
+                }
+            }
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+=== src/config.rs ===
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub default_model: String,
+    pub api_url: String,
+    pub history_limit: usize,
+    pub show_tokens: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            default_model: "qwen3-coder:480b-cloud".to_string(),
+            api_url: "http://172.23.240.1:11434/api/chat".to_string(),
+            history_limit: 20,
+            show_tokens: true,
+        }
+    }
+}
+
+impl Config {
+    pub fn load() -> Self {
+        let path = Self::get_config_path();
+        if path.exists() {
+            let contents = fs::read_to_string(path).unwrap_or_default();
+            toml::from_str(&contents).unwrap_or_else(|_| Self::default())
+        } else {
+            let config = Self::default();
+            config.save();
+            config
+        }
+    }
+    
+    pub fn save(&self) {
+        let path = Self::get_config_path();
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        if let Ok(contents) = toml::to_string_pretty(self) {
+            let _ = fs::write(path, contents);
+        }
+    }
+
+    fn get_config_path() -> PathBuf {
+        dirs::home_dir().expect("HOME not set").join(".fuchecode").join("config.toml")
+    }
+}
+
+=== src/history.rs ===
+use std::fs::{self, OpenOptions};
+use std::io::{Write, BufRead, BufReader};
+use serde_json::{json, Value};
+use std::path::PathBuf;
+
+fn get_history_path() -> PathBuf {
+    dirs::home_dir().expect("HOME not set").join(".fuchecode_history.json")
+}
+
+pub fn save(user_msg: &str, assistant_msg: &str) {
+    let path = get_history_path();
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let entry = json!({
+            "role": "user",
+            "content": user_msg,
+            "timestamp": chrono::Utc::now().timestamp()
+        });
+        let _ = writeln!(file, "{entry}");
+
+        let entry = json!({
+            "role": "assistant",
+            "content": assistant_msg,
+            "timestamp": chrono::Utc::now().timestamp()
+        });
+        let _ = writeln!(file, "{entry}");
+    }
+}
+
+pub fn load_last(n: usize) -> Vec<Value> {
+    let path = get_history_path();
+    if !path.exists() { return vec![]; }
+    
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return vec![],
+    };
+    let reader = BufReader::new(file);
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let last_n = lines.iter().rev().take(n).rev();
+    
+    last_n.filter_map(|line| serde_json::from_str(line).ok()).collect()
+}
+
+pub fn clear() {
+    let path = get_history_path();
+    let _ = fs::remove_file(path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clear_missing_file_no_panic() {
+        clear();
+    }
+
+    #[test]
+    fn test_history_path_has_correct_name() {
+        let path = get_history_path();
+        assert!(path.to_string_lossy().ends_with(".fuchecode_history.json"));
+    }
+
+    #[test]
+    fn test_jsonl_roundtrip() {
+        let path = PathBuf::from("/tmp/fuchecode_test_jsonl.json");
+        {
+            let mut file = OpenOptions::new().create(true).append(true).open(&path).unwrap();
+            let entry = json!({"role": "user", "content": "hi", "timestamp": 0});
+            writeln!(file, "{entry}").unwrap();
+            let entry = json!({"role": "assistant", "content": "hey", "timestamp": 1});
+            writeln!(file, "{entry}").unwrap();
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["role"], "user");
+        assert_eq!(lines[0]["content"], "hi");
+        assert_eq!(lines[1]["role"], "assistant");
+        assert_eq!(lines[1]["content"], "hey");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_corrupted_line_skipped() {
+        let path = PathBuf::from("/tmp/fuchecode_test_corrupt.json");
+        {
+            let mut file = fs::File::create(&path).unwrap();
+            writeln!(file, r#"{{"role": "user", "content": "good", "timestamp": 1}}"#).unwrap();
+            writeln!(file, "not valid json").unwrap();
+            writeln!(file, r#"{{"role": "assistant", "content": "ok", "timestamp": 2}}"#).unwrap();
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert_eq!(lines.len(), 2);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_empty_file() {
+        let path = PathBuf::from("/tmp/fuchecode_test_empty.json");
+        fs::write(&path, "").unwrap();
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<Value> = reader.lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str(&line).ok())
+            .collect();
+
+        assert!(lines.is_empty());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_jsonl_last_n_filter() {
+        let path = PathBuf::from("/tmp/fuchecode_test_lastn.json");
+        {
+            let mut file = fs::File::create(&path).unwrap();
+            for i in 0..5 {
+                let entry = json!({"role": "user", "content": i.to_string(), "timestamp": i});
+                writeln!(file, "{entry}").unwrap();
+            }
+        }
+
+        let file = fs::File::open(&path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+        let last_n: Vec<Value> = lines.iter()
+            .rev().take(3).rev()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+
+        assert_eq!(last_n.len(), 3);
+        assert_eq!(last_n[0]["content"], "2");
+        assert_eq!(last_n[2]["content"], "4");
+        let _ = fs::remove_file(&path);
+    }
+}
+
+=== src/main.rs ===
+mod config;
+mod ollama;
+mod ui;
+mod spinner;
+mod history;
+mod commands;
+mod mode;
+mod tools;
+mod popup;
+
+use std::io::{self, Write};
+use colored::*;
+use mode::Mode;
+use tokio::select;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = config::Config::load();
+    let mut current_model = cfg.default_model.clone();
+    let mut current_mode = Mode::Build;
+
+    print!("\x1B[2J\x1B[1;1H");
+    ui::header_with_mode(&current_model, &current_mode);
+
+    loop {
+        ui::user_prompt_with_mode(&current_mode);
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let input = input.trim();
+
+        if input == "exit" || input == "/exit" { break; }
+        if input.is_empty() { continue; }
+
+        if input == "/" {
+            let cmd = popup::show();
+            if cmd.is_empty() { continue; }
+            if cmd == "/exit" { break; }
+            if cmd == "/mode" {
+                current_mode = current_mode.toggle();
+                print!("\x1B[2J\x1B[1;1H");
+                ui::header_with_mode(&current_model, &current_mode);
+                continue;
+            }
+            if commands::handle(&cmd, &mut current_model).await? {
+                continue;
+            }
+            // If it's a model switch, treat as regular input
+            if cmd.starts_with("/model ") {
+                continue;
+            }
+            // Otherwise just continue
+            continue;
+        }
+
+        if input == "tab" || input == "/mode" {
+            current_mode = current_mode.toggle();
+            print!("\x1B[2J\x1B[1;1H");
+            ui::header_with_mode(&current_model, &current_mode);
+            continue;
+        }
+
+        if commands::handle(input, &mut current_model).await? {
+            continue;
+        }
+
+        ui::bot_prefix_with_mode(&current_mode);
+        let spinner = ui::print_timer_start();
+
+        let chat_fut = ollama::chat(&cfg.api_url, &current_model, input);
+        let ctrl_c_fut = tokio::signal::ctrl_c();
+
+        let response = select! {
+            result = chat_fut => {
+                match result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        ui::print_timer_stop(&spinner);
+                        ui::print_cancelled("Error");
+                        eprintln!(" {}", e);
+                        continue;
+                    }
+                }
+            }
+            _ = ctrl_c_fut => {
+                ui::print_timer_stop(&spinner);
+                ui::print_cancelled("Generation cancelled");
+                continue;
+            }
+        };
+
+        ui::print_timer_stop(&spinner);
+        for c in response.chars() {
+            print!("{}", c.to_string().bright_green());
+            io::stdout().flush()?;
+        }
+        println!("\n└────────────────────────────────────────────┘\n");
+    }
+    Ok(())
+}
+
+=== src/mode.rs ===
+use std::fmt;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Mode {
+    Build,
+    Plan,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct ToolPermission {
+    pub read: bool,
+    pub write: bool,
+    pub execute: bool,
+    pub network: bool,
+}
+
+impl Mode {
+    pub fn toggle(&self) -> Self {
+        match self {
+            Mode::Build => Mode::Plan,
+            Mode::Plan => Mode::Build,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn color(&self) -> ratatui::style::Color {
+        match self {
+            Mode::Build => ratatui::style::Color::Rgb(0, 150, 255),
+            Mode::Plan => ratatui::style::Color::Rgb(255, 165, 0),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Mode::Build => "BUILD",
+            Mode::Plan => "PLAN",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn permissions(&self) -> ToolPermission {
+        match self {
+            Mode::Build => ToolPermission { read: true, write: true, execute: true, network: true },
+            Mode::Plan => ToolPermission { read: true, write: false, execute: false, network: false },
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_toggle_build_to_plan() {
+        assert_eq!(Mode::Build.toggle(), Mode::Plan);
+    }
+
+    #[test]
+    fn test_toggle_plan_to_build() {
+        assert_eq!(Mode::Plan.toggle(), Mode::Build);
+    }
+
+    #[test]
+    fn test_toggle_twice_returns_original() {
+        assert_eq!(Mode::Build.toggle().toggle(), Mode::Build);
+        assert_eq!(Mode::Plan.toggle().toggle(), Mode::Plan);
+    }
+
+    #[test]
+    fn test_name() {
+        assert_eq!(Mode::Build.name(), "BUILD");
+        assert_eq!(Mode::Plan.name(), "PLAN");
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(format!("{}", Mode::Build), "BUILD");
+        assert_eq!(format!("{}", Mode::Plan), "PLAN");
+    }
+
+    #[test]
+    fn test_partial_eq() {
+        assert_eq!(Mode::Build, Mode::Build);
+        assert_ne!(Mode::Build, Mode::Plan);
+    }
+
+    #[test]
+    fn test_build_permissions() {
+        let p = Mode::Build.permissions();
+        assert!(p.read);
+        assert!(p.write);
+        assert!(p.execute);
+        assert!(p.network);
+    }
+
+    #[test]
+    fn test_plan_permissions() {
+        let p = Mode::Plan.permissions();
+        assert!(p.read);
+        assert!(!p.write);
+        assert!(!p.execute);
+        assert!(!p.network);
+    }
+}
+
+=== src/ollama.rs ===
+use reqwest;
+use serde_json::{json, Value};
+use crate::history;
+use std::time::Instant;
+use crate::config::Config;
+
+pub async fn chat(api_url: &str, model: &str, prompt: &str) -> Result<String, reqwest::Error> {
+    let start = Instant::now();
+    let client = reqwest::Client::new();
+    
+    // Determine provider type
+    let is_nvidia = api_url.contains("integrate.api.nvidia.com");
+    let is_clawrouter = api_url.contains("8402") || api_url.contains("blockrun");
+    
+    let response = client.post(api_url)
+        .header("Authorization", if is_nvidia {
+            format!("Bearer {}", std::env::var("NVIDIA_API_KEY").unwrap_or_default())
+        } else {
+            String::new()
+        })
+        .json(&json!({
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": false
+        }))
+        .send().await?;
+    
+    let json: Value = response.json().await?;
+    
+    let answer = if is_nvidia || is_clawrouter {
+        json["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
+    } else {
+        json["message"]["content"].as_str().unwrap_or("").to_string()
+    };
+    
+    let elapsed = start.elapsed().as_millis();
+    eprintln!("💭 {}ms", elapsed);
+    
+    history::save(prompt, &answer);
+    Ok(answer)
+}
+
+fn models_url() -> Option<String> {
+    let cfg = Config::load();
+    let url = &cfg.api_url;
+    if url.ends_with("/api/chat") {
+        Some(url.replace("/api/chat", "/api/tags"))
+    } else if url.contains("/v1/chat/completions") {
+        Some(url.replace("/chat/completions", "/models"))
+    } else {
+        None
+    }
+}
+
+pub async fn list_models() -> Result<Vec<String>, String> {
+    let endpoint = models_url().ok_or_else(|| "No model listing endpoint available for this provider".to_string())?;
+    let client = reqwest::Client::new();
+    let is_nvidia = endpoint.contains("integrate.api.nvidia.com");
+    let mut req = client.get(&endpoint);
+    if is_nvidia {
+        req = req.header("Authorization", format!("Bearer {}", std::env::var("NVIDIA_API_KEY").unwrap_or_default()));
+    }
+    let resp = req.send().await.map_err(|e| format!("Request failed: {}", e))?;
+    let json: Value = resp.json().await.map_err(|e| format!("Failed to decode response: {}", e))?;
+
+    let mut models = Vec::new();
+
+    // Ollama format: { "models": [{ "name": "..." }] }
+    if let Some(arr) = json["models"].as_array() {
+        for m in arr {
+            if let Some(name) = m["name"].as_str() {
+                models.push(name.to_string());
+            }
+        }
+    }
+
+    // OpenAI-compatible format: { "data": [{ "id": "..." }] }
+    if models.is_empty() {
+        if let Some(arr) = json["data"].as_array() {
+            for m in arr {
+                if let Some(id) = m["id"].as_str() {
+                    models.push(id.to_string());
+                }
+            }
+        }
+    }
+
+    models.sort();
+    Ok(models)
+}
+
+=== src/popup.rs ===
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, DisableLineWrap};
+use crossterm::ExecutableCommand;
+use std::io::{self, Write};
+use colored::*;
+
+struct RawGuard;
+
+impl RawGuard {
+    fn enter() -> Self {
+        let _ = enable_raw_mode();
+        RawGuard
+    }
+}
+
+impl Drop for RawGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
+}
+
+const ITEMS: &[(&str, &str)] = &[
+    ("/help", "Show available commands"),
+    ("/mode", "Toggle Build/Plan mode"),
+    ("/model", "Show current model"),
+    ("/model <name>", "Switch model"),
+    ("/models", "List & select from Ollama models"),
+    ("/history", "Show last 10 messages"),
+    ("/clear", "Clear conversation history"),
+    ("/status", "Show system status"),
+    ("/save", "Export conversation to file"),
+    ("/exit", "Quit fuchecode"),
+];
+
+fn draw(selected: usize) {
+    let _ = io::stdout().execute(DisableLineWrap);
+    let mut out = String::new();
+    out.push_str("\r\n");
+    out.push_str(&format!("{}\n", "┌─ Commands ─────────────────────────────────┐".cyan()));
+    for (i, (cmd, desc)) in ITEMS.iter().enumerate() {
+        let line = if i == selected {
+            format!("│ {} {:<10} {}  │\n", "▸".bright_yellow(), cmd.bright_white().bold(), desc.dimmed())
+        } else {
+            format!("│   {:<10} {}  │\n", cmd.bright_green(), desc.dimmed())
+        };
+        out.push_str(&line);
+    }
+    out.push_str(&format!("{}", "└────────────────────────────────────────────┘".cyan()));
+    out.push_str("\r\n");
+    out.push_str(&format!("\r{}", "  ↑↓ navigate · Enter select · Esc close".dimmed()));
+    out.push_str(" \r");
+    print!("{}", out);
+    let _ = io::stdout().flush();
+}
+
+fn clear_popup() {
+    // Clear the popup area by moving up and clearing lines
+    let height = ITEMS.len() as u16 + 4;
+    for _ in 0..height {
+        print!("\x1B[2K\r\x1B[1A");
+    }
+    print!("\r");
+    let _ = io::stdout().flush();
+}
+
+pub fn show() -> String {
+    let _guard = RawGuard::enter();
+    let mut selected = 0usize;
+
+    draw(selected);
+
+    loop {
+        match event::read() {
+            Ok(Event::Key(ke)) if ke.kind == KeyEventKind::Press => {
+                match ke.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if selected > 0 {
+                            selected -= 1;
+                        }
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if selected + 1 < ITEMS.len() {
+                            selected += 1;
+                        }
+                    }
+                    KeyCode::Enter => {
+                        clear_popup();
+                        return ITEMS[selected].0.to_string();
+                    }
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        clear_popup();
+                        return String::new();
+                    }
+                    _ => {}
+                }
+                draw(selected);
+            }
+            Ok(Event::Resize(_, _)) => {
+                draw(selected);
+            }
+            _ => {}
+        }
+    }
+}
+
+=== src/spinner.rs ===
+use std::io::Write;
+use std::time::Instant;
+use tokio::sync::watch;
+use tokio::time::{sleep, Duration};
+
+const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+pub struct SpinnerHandle {
+    stop_tx: watch::Sender<bool>,
+    start: Instant,
+}
+
+pub fn start_spinner() -> SpinnerHandle {
+    let (stop_tx, mut stop_rx) = watch::channel(false);
+    let start = Instant::now();
+
+    tokio::spawn(async move {
+        let mut i = 0usize;
+        loop {
+            tokio::select! {
+                _ = stop_rx.changed() => break,
+                _ = sleep(Duration::from_millis(80)) => {
+                    eprint!("\r{} ", FRAMES[i % FRAMES.len()]);
+                    let _ = std::io::stderr().flush();
+                    i += 1;
+                }
+            }
+        }
+    });
+
+    SpinnerHandle { stop_tx, start }
+}
+
+impl SpinnerHandle {
+    pub fn elapsed_ms(&self) -> u128 {
+        self.start.elapsed().as_millis()
+    }
+
+    pub fn stop(&self) {
+        let _ = self.stop_tx.send(true);
+        eprint!("\r\x1B[2K\r");
+        let _ = std::io::stderr().flush();
+    }
+}
+
+=== src/tools.rs ===
+#![allow(dead_code)]
+
+use std::fs;
+use std::io::{self, Write};
+use crate::mode::ToolPermission;
+
+pub fn read_file(path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    print!("\r📖 {}... ", path);
+    let _ = io::stdout().flush();
+    fs::read_to_string(path).unwrap_or_else(|_| "Not found".to_string())
+}
+
+pub fn list_dir(path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    let path = if path.is_empty() { "." } else { path };
+    print!("\r📁 {}... ", path);
+    let _ = io::stdout().flush();
+    
+    match fs::read_dir(path) {
+        Ok(entries) => {
+            let mut dirs = Vec::new();
+            let mut files = Vec::new();
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if entry.path().is_dir() {
+                    dirs.push(format!("  📁 {}", name));
+                } else {
+                    files.push(format!("  📄 {}", name));
+                }
+            }
+            dirs.sort(); files.sort();
+            let mut output = vec!["📂 Current Directory:".to_string()];
+            if !dirs.is_empty() { output.push("".to_string()); output.push("Directories:".to_string()); output.extend(dirs); }
+            if !files.is_empty() { output.push("".to_string()); output.push("Files:".to_string()); output.extend(files); }
+            output.join("\n")
+        }
+        Err(e) => format!("Error: {}", e),
+    }
+}
+
+pub fn search_content(pattern: &str, path: &str, perms: &ToolPermission) -> String {
+    if !perms.read {
+        return "⛔ Read denied in current mode".to_string();
+    }
+    let path = if path.is_empty() { "." } else { path };
+    print!("\r🔍 '{}' in {}... ", pattern, path);
+    let _ = io::stdout().flush();
+    
+    let mut results = Vec::new();
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file()
+                && let Ok(content) = fs::read_to_string(&p)
+                && content.contains(pattern)
+                && let Some(name) = p.file_name()
+            {
+                results.push(name.to_string_lossy().to_string());
+            }
+        }
+    }
+    if results.is_empty() { "No matches".to_string() } 
+    else { format!("Found in: {}", results.join(", ")) }
+}
+
+pub fn write_file(path: &str, content: &str, perms: &ToolPermission) -> String {
+    if !perms.write {
+        return "⛔ Write denied in current mode".to_string();
+    }
+    match std::fs::write(path, content) {
+        Ok(_) => format!("✅ Written to: {}", path),
+        Err(e) => format!("❌ Error: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn build_perms() -> ToolPermission {
+        ToolPermission { read: true, write: true, execute: true, network: true }
+    }
+
+    fn plan_perms() -> ToolPermission {
+        ToolPermission { read: true, write: false, execute: false, network: false }
+    }
+
+    #[test]
+    fn test_read_file_not_found() {
+        let result = read_file("/tmp/nonexistent_file_12345.txt", &build_perms());
+        assert_eq!(result, "Not found");
+    }
+
+    #[test]
+    fn test_read_file_empty() {
+        let path = "/tmp/fuchecode_test_empty.txt";
+        fs::write(path, "").unwrap();
+        let result = read_file(path, &build_perms());
+        assert_eq!(result, "");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_read_file_with_content() {
+        let path = "/tmp/fuchecode_test_content.txt";
+        fs::write(path, "hello world").unwrap();
+        let result = read_file(path, &build_perms());
+        assert_eq!(result, "hello world");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_list_dir_empty_path() {
+        let result = list_dir("", &build_perms());
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_list_dir_nonexistent() {
+        let result = list_dir("/tmp/fuchecode_nonexistent_dir_xyz", &build_perms());
+        assert!(result.starts_with("Error:"));
+    }
+
+    #[test]
+    fn test_list_dir_with_files() {
+        let dir = "/tmp/fuchecode_test_listdir";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/a.txt"), "a").unwrap();
+        let result = list_dir(dir, &build_perms());
+        assert!(result.contains("a.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_search_content_no_match() {
+        let result = search_content("zzz_xyz_nonexistent", "/tmp", &build_perms());
+        assert_eq!(result, "No matches");
+    }
+
+    #[test]
+    fn test_search_content_finds_match() {
+        let dir = "/tmp/fuchecode_test_search";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/findme.txt"), "secret_keyword_42").unwrap();
+        let result = search_content("secret_keyword_42", dir, &build_perms());
+        assert!(result.contains("findme.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_search_content_empty_pattern() {
+        let dir = "/tmp/fuchecode_test_search_empty";
+        let _ = fs::create_dir_all(dir);
+        fs::write(format!("{dir}/any.txt"), "data").unwrap();
+        let result = search_content("", dir, &build_perms());
+        assert!(result.contains("any.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_write_file_success() {
+        let path = "/tmp/fuchecode_test_write.txt";
+        let result = write_file(path, "test content", &build_perms());
+        assert!(result.contains("✅ Written to"));
+
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content, "test content");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_write_file_invalid_path() {
+        let result = write_file("/dev/null/fuchecode_test", "data", &build_perms());
+        assert!(result.starts_with("❌ Error:"));
+    }
+
+    #[test]
+    fn test_list_dir_special_chars_in_name() {
+        let dir = "/tmp/fuchecode_test_special";
+        let _ = fs::create_dir_all(dir);
+        let file_path = format!("{dir}/file with spaces!@#.txt");
+        fs::write(&file_path, "data").unwrap();
+        let result = list_dir(dir, &build_perms());
+        assert!(result.contains("file with spaces!@#.txt"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_write_denied_in_plan_mode() {
+        let result = write_file("/tmp/fuchecode_denied.txt", "data", &plan_perms());
+        assert!(result.contains("⛔"));
+        assert!(result.contains("denied"));
+    }
+
+    #[test]
+    fn test_read_allowed_in_plan_mode() {
+        let path = "/tmp/fuchecode_plan_read.txt";
+        fs::write(path, "visible").unwrap();
+        let result = read_file(path, &plan_perms());
+        assert_eq!(result, "visible");
+        let _ = fs::remove_file(path);
+    }
+}
+
+=== src/ui.rs ===
+use colored::*;
+use std::io::Write;
+use crate::mode::Mode;
+use crate::spinner::{self, SpinnerHandle};
+
+pub fn header(model: &str) {
+    header_with_mode(model, &Mode::Build);
+}
+
+pub fn header_with_mode(model: &str, mode: &Mode) {
+    let mode_tag = format!("{} {}", match mode { Mode::Build => "🔵", Mode::Plan => "🟠" }, mode.name());
+    print!("\r{}\n", "╔════════════════════════════════════════════╗".cyan());
+    print!("\r{}\n", "║  ███████╗██╗   ██╗ ██████╗██╗  ██╗███████╗    ║".cyan());
+    print!("\r{}\n", "║  ██╔════╝██║   ██║██╔════╝██║  ██║██╔════╝    ║".cyan());
+    print!("\r{}\n", "║  █████╗  ██║   ██║██║     ███████║█████╗      ║".cyan());
+    print!("\r{}\n", "║  ██╔══╝  ██║   ██║██║     ██╔══██║██╔══╝      ║".cyan());
+    print!("\r{}\n", "║  ██║     ╚██████╔╝╚██████╗██║  ██║███████╗    ║".cyan());
+    print!("\r{}\n", "║  ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝    ║".cyan());
+    print!("\r{}\n", "╠════════════════════════════════════════════╣".cyan());
+    print!("\r║  {} {}  {:>12}  ║\n", "🔥 FUCHECODE".bright_red().bold(), "v1.0".yellow(), mode_tag.cyan());
+    print!("\r║  {} {}  ║\n", "🤖 Model:".green(), model.cyan());
+    print!("\r{}\n", "╚════════════════════════════════════════════╝".cyan());
+    print!("\r\n");
+    std::io::stdout().flush().ok();
+}
+
+pub fn user_prompt_with_mode(mode: &Mode) {
+    let prefix = match mode {
+        Mode::Build => "┌─[BUILD]".bright_blue(),
+        Mode::Plan => "┌─[PLAN]".bright_yellow(),
+    };
+    print!("\r{}\n\r│ ", prefix);
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+}
+
+pub fn bot_prefix_with_mode(mode: &Mode) {
+    let prefix = match mode {
+        Mode::Build => "├─[BUILD]".bright_blue(),
+        Mode::Plan => "├─[PLAN]".bright_yellow(),
+    };
+    print!("\r{}\n", prefix);
+    print!("\r│ ");
+}
+
+pub fn print_timer_start() -> SpinnerHandle {
+    spinner::start_spinner()
+}
+
+pub fn print_timer_stop(handle: &SpinnerHandle) {
+    handle.stop();
+    println!("💭 {}ms", handle.elapsed_ms());
+}
+
+pub fn print_cancelled(reason: &str) {
+    print!("\r\x1B[2K\r⚠️ {} — use /mode to switch mode\n", reason);
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+}
+
