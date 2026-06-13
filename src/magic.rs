@@ -358,6 +358,7 @@ pub async fn run() {
     let cpu_freq = read_cpu_freq_mhz();
     let cpu_cores = 24;
     let mut sparkline = VecDeque::new();
+    let mut esc_pressed = false;
 
     loop {
         globe.rotation += 0.015;
@@ -578,11 +579,18 @@ pub async fn run() {
                     .constraints([Constraint::Length(1), Constraint::Length(1)])
                     .split(vert[1]);
 
-                let info = format!("Jarvis Online ⚡  ·  ♫ {}    < > skip", track);
-                let bottom = Paragraph::new(info)
-                    .style(Style::default().fg(Color::Rgb(0, 230, 200)))
-                    .alignment(Alignment::Center);
-                f.render_widget(bottom, bchunks[0]);
+                if esc_pressed {
+                    let confirm = Paragraph::new("Press Esc again to exit, or any other key to continue")
+                        .style(Style::default().fg(Color::Rgb(255, 200, 0)))
+                        .alignment(Alignment::Center);
+                    f.render_widget(confirm, bchunks[0]);
+                } else {
+                    let info = format!("Jarvis Online ⚡  ·  ♫ {}    < > skip", track);
+                    let bottom = Paragraph::new(info)
+                        .style(Style::default().fg(Color::Rgb(0, 230, 200)))
+                        .alignment(Alignment::Center);
+                    f.render_widget(bottom, bchunks[0]);
+                }
 
                 if env_ready && !env.is_empty() {
                     let bw = bchunks[1].width as usize;
@@ -607,14 +615,17 @@ pub async fn run() {
         if crossterm::event::poll(Duration::from_millis(33)).ok().unwrap_or(false) {
             if let Ok(crossterm::event::Event::Key(k)) = crossterm::event::read() {
                 match k.code {
-                    crossterm::event::KeyCode::Esc => break,
+                    crossterm::event::KeyCode::Esc if esc_pressed => break,
+                    crossterm::event::KeyCode::Esc => esc_pressed = true,
                     crossterm::event::KeyCode::Char(',') | crossterm::event::KeyCode::Char('<') => {
+                        esc_pressed = false;
                         play_song(&state);
                     }
                     crossterm::event::KeyCode::Char('.') | crossterm::event::KeyCode::Char('>') => {
+                        esc_pressed = false;
                         play_song(&state);
                     }
-                    _ => {}
+                    _ => esc_pressed = false,
                 }
             }
         }
