@@ -4,7 +4,7 @@ use std::process::Child;
 use std::process::ChildStdin;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use rodio::{Decoder, OutputStreamHandle, Sink};
 
 pub struct AudioState {
@@ -19,6 +19,7 @@ pub struct AudioState {
     pub muted: bool,
     pub dragging: bool,
     pub paused: bool,
+    pub paused_duration: Duration,
     pub play_start: Instant,
     pub amp_envelope: Vec<f64>,
     pub sample_rate: f64,
@@ -99,6 +100,12 @@ pub fn set_volume(state: &Arc<Mutex<AudioState>>, vol: f64) {
 
 pub fn toggle_pause(state: &Arc<Mutex<AudioState>>) {
     if let Ok(mut s) = state.lock() {
+        if s.paused {
+            s.play_start = Instant::now();
+        } else {
+            let elapsed_paused = s.play_start.elapsed();
+            s.paused_duration += elapsed_paused;
+        }
         s.paused = !s.paused;
         let cmd = if s.paused { "pause" } else { "play" };
         if s.use_powershell {
@@ -143,6 +150,7 @@ pub fn play_idx(state: &Arc<Mutex<AudioState>>, idx: usize) {
     s.track_name = extract_name(&path);
 
     s.paused = false;
+    s.paused_duration = Duration::ZERO;
     if s.use_powershell {
         if let Some(mut child) = s.child.take() {
             let _ = child.kill();

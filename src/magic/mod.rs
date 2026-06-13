@@ -44,6 +44,7 @@ pub async fn run() {
         muted: cfg.magic_muted,
         dragging: false,
         paused: false,
+        paused_duration: Default::default(),
         play_start: Instant::now(),
         amp_envelope: Vec::new(),
         sample_rate: 44100.0,
