@@ -237,12 +237,21 @@ fn scan_mp3s() -> Vec<String> {
     songs
 }
 
-fn wsl_to_win(wsl: &str) -> Option<String> {
-    let out = std::process::Command::new("wslpath")
-        .args(["-w", wsl]).output().ok()?;
-    if out.status.success() {
-        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
-    } else { None }
+fn wsl_to_win(wsl: &str) -> String {
+    // Try wslpath first
+    if let Ok(out) = std::process::Command::new("wslpath")
+        .args(["-w", wsl]).output()
+    {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !s.is_empty() { return s; }
+        }
+    }
+    // Fallback: /mnt/c/... → C:\...
+    let s = wsl.trim_start_matches("/mnt/");
+    let drive = s.chars().next().map(|c| format!("{}:", c.to_ascii_uppercase())).unwrap_or_default();
+    let rest = s.chars().skip(1).collect::<String>();
+    format!("{}{}", drive, rest.replace('/', "\\"))
 }
 
 fn pick_random(len: usize, exclude: Option<usize>) -> usize {
@@ -293,15 +302,16 @@ fn play_song(state: &Arc<Mutex<AudioState>>) {
     }
     let path = s.songs[s.current].clone();
     s.track_name = extract_name(&path);
-    if let Some(win) = wsl_to_win(&path) {
-        let cmd = format!(
-            "Add-Type -AssemblyName PresentationCore; \
-             $p = New-Object System.Windows.Media.MediaPlayer; \
-             $p.Open('{}'); $p.Play(); Start-Sleep 9999", win);
-        if let Ok(c) = std::process::Command::new("powershell.exe")
-            .args(["-Command", &cmd]).spawn()
-        { s.child = Some(c); }
-    }
+    let win = wsl_to_win(&path);
+    eprintln!("  ♫ Now playing [{}]: {}", s.current, s.track_name);
+    let cmd = format!(
+        "Add-Type -AssemblyName PresentationCore; \
+         $p = New-Object System.Windows.Media.MediaPlayer; \
+         $p.Open('{}'); $p.Play(); Start-Sleep 9999", win);
+    if let Ok(c) = std::process::Command::new("powershell.exe")
+        .args(["-Command", &cmd]).spawn()
+    { s.child = Some(c); }
+    else { eprintln!("  ❌ Failed to spawn powershell.exe"); }
     s.play_start = Instant::now();
     s.envelope_ready = false;
     s.amp_envelope.clear();
@@ -324,7 +334,7 @@ pub async fn run() {
     }
     let state = Arc::new(Mutex::new(AudioState {
         songs,
-        current: pick_random(0, None), // placeholder, play_song recalculates
+        current: 0, // play_song picks random on first call
         child: None,
         play_start: Instant::now(),
         amp_envelope: Vec::new(),
